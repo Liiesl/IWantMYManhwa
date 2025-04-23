@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "WebtoonScan Bulk Downloader (ZIP per Chapter)",
+  "version": "1.2",
+  "description": "Downloads manhwa chapters in bulk from webtoonscan.com as ZIP files via the side panel, using tabs for scraping.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "*://*.webtoonscan.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.webtoonscan.com/manhwa/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "48": "icons/icon48.png" 
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["jszip.min.js"], 
+      "matches": ["<all_urls>"] 
+    }
+  ]
+}

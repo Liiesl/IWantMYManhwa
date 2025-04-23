@@ -1,0 +1,331 @@
+:root {
+    --bg-color: #0a0a0a;
+    --surface-color: #141414;
+    --accent-color: #6b46ff;
+    --text-primary: rgba(255, 255, 255, 0.9);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-disabled: rgba(255, 255, 255, 0.38);
+    --border-color: rgba(255, 255, 255, 0.12);
+    
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    
+    --border-radius: 8px;
+    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-width: 280px;
+}
+
+.app {
+    padding: var(--spacing-lg) var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.9;
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--text-primary);
+    background-color: var(--accent-color);
+    width: 100%;
+}
+
+.action-button:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.button-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scan-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.series-info {
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    position: relative;
+}
+
+#manhwaTitle {
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+    color: var(--text-primary);
+    font-size: 15px;
+}
+
+.chapters-found {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.range-slider {
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+}
+
+.range-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+.range-start, .range-end {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.range-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.range-divider {
+    width: 15px;
+    height: 1px;
+    background-color: var(--border-color);
+    margin-top: 16px;
+}
+
+input[type="number"] {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 7px 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+    width: 100%;
+    transition: var(--transition);
+}
+
+input[type="number"]:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
+.status-area {
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    position: relative;
+}
+
+/* Hidden element for JavaScript compatibility */
+.hidden-status {
+    position: absolute;
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    border: 0;
+    margin: -1px;
+    padding: 0;
+}
+
+.status-message {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: var(--spacing-sm);
+}
+
+.progress-container {
+    display: none;
+}
+
+.progress-track {
+    height: 4px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: var(--spacing-sm);
+}
+
+.progress-indicator {
+    height: 100%;
+    width: 0%;
+    background-color: var(--accent-color);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.progress-detail {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Hidden element that the JS interacts with */
+#progressBar {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Custom JS behavior hooks */
+#progressBar[style*="display: block"] ~ .progress-container {
+    display: block;
+}
+
+/* sidepanel.css */
+/* ... (keep existing styles) ... */
+
+.status-area {
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    position: relative;
+    display: flex; /* Use flex for better layout */
+    flex-direction: column;
+    gap: var(--spacing-md); /* Add gap between elements */
+}
+
+.status-message { /* This is now the overall status */
+    color: var(--text-secondary);
+    font-size: 13px;
+    /* remove margin-bottom if using flex gap */
+}
+
+/* NEW: Chapter Progress List Container */
+.chapter-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm); /* Space between chapter items */
+    max-height: 200px; /* Limit height and make it scrollable */
+    overflow-y: auto;
+    /* Add some padding if needed, or rely on item padding */
+    padding-right: 5px; /* Space for scrollbar */
+}
+
+/* NEW: Individual Chapter Progress Item */
+.chapter-progress-item {
+    background-color: rgba(255, 255, 255, 0.05); /* Slightly different background */
+    border-radius: 4px;
+    padding: var(--spacing-sm);
+    transition: background-color 0.3s ease;
+}
+
+.chapter-progress-item.completed {
+    background-color: rgba(76, 175, 80, 0.1); /* Greenish tint for success */
+}
+.chapter-progress-item.failed {
+     background-color: rgba(244, 67, 54, 0.1); /* Reddish tint for failure */
+}
+
+
+.chapter-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.chapter-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 60%; /* Prevent long names pushing status out */
+}
+
+.chapter-status {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.chapter-progress-item.completed .chapter-status,
+.chapter-progress-item.failed .chapter-status {
+     font-weight: 500;
+}
+
+.chapter-progress-item.completed .chapter-status {
+     color: #4CAF50; /* Success color */
+}
+.chapter-progress-item.failed .chapter-status {
+     color: #f44336; /* Failure color */
+}
+
+
+/* NEW: Chapter Progress Bar Track */
+.chapter-progress-track {
+    height: 3px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+/* NEW: Chapter Progress Bar Fill */
+.chapter-progress-fill {
+    height: 100%;
+    width: 0%; /* Controlled by JS */
+    background-color: var(--accent-color);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+/* Optional: Style scrollbar for chapter list */
+.chapter-progress-list::-webkit-scrollbar {
+  width: 4px;
+}
+.chapter-progress-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chapter-progress-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+/* ... (keep MutationObserver styles for #progressBar) ... */
