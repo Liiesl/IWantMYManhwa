@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "WebtoonScan Bulk Downloader (ZIP per Chapter)",
-  "version": "1.2",
+  "name": "IWantMYManhwa",
+  "version": "1.3",
   "description": "Downloads manhwa chapters in bulk from webtoonscan.com as ZIP files via the side panel, using tabs for scraping.",
   "permissions": [
     "sidePanel",
