@@ -34,30 +34,22 @@ Compatibility with websites can change over time due to updates on their end. We
 <details>
 <summary><strong>Currently Supported (Click to expand)</strong></summary>
 
-* `[Website Name 1 - e.g., https://example-manga-site.com]`
-* `[Website Name 2 - e.g., https://another-manhwa-hub.org]`
-* `[Website Name 3]`
-* `[Website Name 4]`
-* `... add the full list here`
-* `[Keep adding supported sites]`
-
+* `[Webtoonscan | https://webtoonscan.com]`
 </details>
 
 <details>
 <summary><strong>Deprecated (Click to expand)</strong></summary>
 
-* `[Previously Supported Website A - Reason for deprecation]`
-* `[Previously Supported Website B - Reason for deprecation]`
-* `... add more if applicable`
+* `[Nothing to see here yet]`
 
 </details>
 
 <details>
 <summary><strong>Planned / Future Support (Click to expand)</strong></summary>
 
-* `[Website X]`
-* `[Website Y]`
-* `... add more if applicable`
+* `[Bato]`
+* `[Mangadex]`
+* `[Mgeko]`
 
 </details>
 
