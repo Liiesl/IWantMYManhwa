@@ -131,6 +131,7 @@ class WebtoonscanAdapter extends WebtoonscanContentAdapter {
         } finally {
             if (imageTabId) {
                 try {
+                    await new Promise(r => setTimeout(r, 2000));
                     await chrome.tabs.remove(imageTabId);
                     activeTabIds.delete(imageTabId);
                 } catch (e) {}

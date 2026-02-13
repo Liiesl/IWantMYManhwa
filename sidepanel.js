@@ -233,13 +233,7 @@ scanChaptersBtn.addEventListener('click', async () => {
 
             // Check the action name returned by content.js
             if (response && response.action === "chaptersFound" && response.chapters && response.chapters.length > 0) {
-                 // Sort chapters numerically ASCENDING
-                response.chapters.sort((a, b) => {
-                    const numA = parseFloat(a.name.match(/^[\d\.]+/)?.[0] || a.name);
-                    const numB = parseFloat(b.name.match(/^[\d\.]+/)?.[0] || b.name);
-                    return (!isNaN(numA) && !isNaN(numB)) ? numA - numB : a.name.localeCompare(b.name);
-                });
-
+                // Chapters are already sorted by content script
                 chapterList = response.chapters;
                 currentManhwaTitle = response.title || 'Unknown Title';
                 manhwaTitleEl.textContent = currentManhwaTitle;
