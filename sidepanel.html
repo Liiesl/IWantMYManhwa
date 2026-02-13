@@ -7,8 +7,22 @@
 </head>
 <body>
     <div class="app">
-        <h1>Manhwa Downloader</h1>
+        <h1>I Want My Manhwa</h1>
 
+        <!-- Unsupported Site Container -->
+        <div id="unsupportedSiteContainer" class="unsupported-site-container" style="display: none;">
+            <div class="unsupported-content">
+                <h2>Sorry, the site is not supported yet.</h2>
+                <p class="question-text">Are you in the right site?</p>
+                <button id="recheckBtn" class="action-button recheck-button">
+                    <span class="button-icon"><i class="fas fa-sync-alt"></i></span>
+                    <span>Re-check</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Container -->
+        <div id="mainContent" class="main-content">
         <div class="scan-section">
             <div class="scan-button-group">
                 <button id="scanChaptersBtn" class="action-button scan-button">
@@ -87,12 +101,13 @@
                 -->
             </div>
         </div>
+        </div> <!-- End main-content -->
 
         <footer class="report-footer">
             <div class="report-section">
                 <a href="#" id="reportBrokenLink" target="_blank" class="report-link">
                     <i class="fas fa-bug"></i>
-                    <span>Report Issue</span>
+                    <span id="reportLinkText">Report Issue</span>
                 </a>
                 <div class="current-url-display" id="currentUrlDisplay" title="Current page URL">
                     <i class="fas fa-link"></i>

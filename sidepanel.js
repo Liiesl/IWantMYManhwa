@@ -18,6 +18,9 @@ const overallProgressContainerEl = document.getElementById('overallProgressConta
 const progressVisual = document.getElementById('progress-visual'); // Visible overall bar fill
 const progressText = document.getElementById('progressText'); // Text for overall bar
 const chapterProgressContainerEl = document.getElementById('chapterProgressContainer');
+const unsupportedSiteContainer = document.getElementById('unsupportedSiteContainer');
+const mainContent = document.getElementById('mainContent');
+const recheckBtn = document.getElementById('recheckBtn');
 
 // --- State ---
 let chapterList = []; // Sorted ASCENDING (Ch 1, Ch 2, ...)
@@ -260,9 +263,9 @@ scanChaptersBtn.addEventListener('click', async () => {
                 console.error("Invalid or error response from content script:", response);
             }
         } else {
-            setOverallStatus('Not on a webtoonscan.com/manhwa/ page.', true);
-             chapterList = [];
-             currentManhwaTitle = '';
+            showUnsupportedSiteUI();
+            chapterList = [];
+            currentManhwaTitle = '';
         }
     } catch (error) {
         setOverallStatus(`Error scanning: ${error.message.substring(0, 100)}...`, true);
@@ -447,6 +450,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
      return true; // Keep channel open
 });
 
+// --- Site Support Functions ---
+function showUnsupportedSiteUI() {
+    unsupportedSiteContainer.style.display = 'flex';
+    mainContent.style.display = 'none';
+    updateRequestSiteLink();
+}
+
+function showMainContentUI() {
+    unsupportedSiteContainer.style.display = 'none';
+    mainContent.style.display = 'flex';
+    updateReportLink();
+}
+
+async function checkSiteSupport() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.url && tab.url.includes("webtoonscan.com/manhwa/")) {
+            showMainContentUI();
+            setOverallStatus("Ready. Click 'Scan'.");
+            scanChaptersBtn.disabled = false;
+            downloadBtn.disabled = true;
+            return true;
+        } else {
+            showUnsupportedSiteUI();
+            scanChaptersBtn.disabled = true;
+            downloadBtn.disabled = true;
+            return false;
+        }
+    } catch(e) {
+        console.error("Error checking site support:", e);
+        showUnsupportedSiteUI();
+        return false;
+    }
+}
+
 // --- Initial State Setup ---
 async function initializePanel() {
      setOverallStatus("Initializing...");
@@ -459,29 +497,66 @@ async function initializePanel() {
      clearChapterProgress();
      hideOverallProgress(); // Ensure hidden initially
 
-    try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.url && tab.url.includes("webtoonscan.com/manhwa/")) {
-             setOverallStatus("Ready. Click 'Scan'.");
-             scanChaptersBtn.disabled = false;
-             downloadBtn.disabled = true;
-        } else {
-             setOverallStatus("Open a webtoonscan.com/manhwa/ page first.", true);
-             scanChaptersBtn.disabled = true;
-             downloadBtn.disabled = true;
-        }
-    } catch(e) {
-        setOverallStatus("Error getting current tab info.", true);
-        console.error("Initialization error:", e);
-        scanChaptersBtn.disabled = true;
-        downloadBtn.disabled = true;
-    }
+    // Check site support and show appropriate UI
+    await checkSiteSupport();
 }
 
 // Help button click handler
 document.getElementById('helpBtn').addEventListener('click', () => {
     window.open(chrome.runtime.getURL('docs/wiki.html'), '_blank');
 });
+
+// Re-check button click handler
+recheckBtn.addEventListener('click', async () => {
+    recheckBtn.disabled = true;
+    const icon = recheckBtn.querySelector('.button-icon i');
+    icon.classList.add('fa-spin');
+    
+    const isSupported = await checkSiteSupport();
+    
+    recheckBtn.disabled = false;
+    icon.classList.remove('fa-spin');
+});
+
+// Update request site link for unsupported sites
+async function updateRequestSiteLink() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const manifest = chrome.runtime.getManifest();
+        const version = manifest.version || 'unknown';
+        
+        let currentUrl = 'Not available';
+        if (tab?.url) {
+            currentUrl = tab.url;
+            const urlText = document.getElementById('currentUrlText');
+            const urlDisplay = document.getElementById('currentUrlDisplay');
+            if (urlText && urlDisplay) {
+                const displayUrl = currentUrl.length > 50 
+                    ? currentUrl.substring(0, 50) + '...' 
+                    : currentUrl;
+                urlText.textContent = displayUrl;
+                urlDisplay.title = currentUrl;
+                urlDisplay.classList.add('has-url');
+            }
+        }
+        
+        const title = encodeURIComponent('Site Support Request');
+        const body = encodeURIComponent(
+            `## Site Support Request\n\n### Site URL\n${currentUrl}\n\n### Site Name\n<!-- Example: mangareader.com -->\n\n### Why do you want this site supported?\n<!-- Describe what kind of content this site has -->\n\n### Extension Version\n${version}\n\n### Additional Information\n<!-- Any other details that might help -->`
+        );
+        
+        const reportLink = document.getElementById('reportBrokenLink');
+        const reportLinkText = document.getElementById('reportLinkText');
+        if (reportLink) {
+            reportLink.href = `https://github.com/Liiesl/IWantMYManhwa/issues/new?title=${title}&body=${body}`;
+        }
+        if (reportLinkText) {
+            reportLinkText.textContent = 'Request Site';
+        }
+    } catch (error) {
+        console.error('Error updating request site link:', error);
+    }
+}
 
 // Update report link with dynamic content
 async function updateReportLink() {
@@ -542,8 +617,12 @@ ${version}
         );
         
         const reportLink = document.getElementById('reportBrokenLink');
+        const reportLinkText = document.getElementById('reportLinkText');
         if (reportLink) {
             reportLink.href = `https://github.com/Liiesl/IWantMYManhwa/issues/new?title=${title}&body=${body}`;
+        }
+        if (reportLinkText) {
+            reportLinkText.textContent = 'Report Issue';
         }
     } catch (error) {
         console.error('Error updating report link:', error);

@@ -367,6 +367,64 @@ input[type="number"]:focus {
     background-color: #4CAF50;
 }
 
+/* Unsupported Site Container */
+.unsupported-site-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg);
+    text-align: center;
+    min-height: 300px;
+}
+
+.unsupported-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.unsupported-icon {
+    font-size: 48px;
+    color: #ff9800;
+    margin-bottom: var(--spacing-sm);
+}
+
+.unsupported-content h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.unsupported-content p {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.unsupported-content .question-text {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-top: var(--spacing-xs);
+}
+
+.recheck-button {
+    margin-top: var(--spacing-md);
+    min-width: 140px;
+}
+
+.recheck-button:hover:not(:disabled) {
+    filter: brightness(1.15);
+    transform: translateY(-1px);
+}
+
+/* Main Content (for toggling visibility) */
+.main-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
 /* Report Section */
 .report-footer {
     padding-top: var(--spacing-sm);
