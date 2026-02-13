@@ -210,8 +210,20 @@ scanChaptersBtn.addEventListener('click', async () => {
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        // Use the content script logic for scanning (remains unchanged)
         if (tab?.url && tab.url.includes("webtoonscan.com/manhwa/")) {
+            // Inject content script dynamically to ensure it's loaded
+            console.log('Injecting content script...');
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['content.js']
+                });
+                console.log('Content script injected successfully');
+            } catch (injectError) {
+                // Script might already be injected, which is fine
+                console.log('Content script injection result:', injectError?.message || 'Already injected or failed');
+            }
+
             console.log('Sending getChapters request to content script...');
             const response = await chrome.tabs.sendMessage(tab.id, { action: "getChapters" });
             console.log('Received response from content script:', response);
@@ -465,6 +477,11 @@ async function initializePanel() {
         downloadBtn.disabled = true;
     }
 }
+
+// Help button click handler
+document.getElementById('helpBtn').addEventListener('click', () => {
+    window.open(chrome.runtime.getURL('docs/wiki.html'), '_blank');
+});
 
 // Initialize on load
 initializePanel();

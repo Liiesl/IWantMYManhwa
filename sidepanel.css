@@ -88,6 +88,20 @@ h1 {
     gap: var(--spacing-md);
 }
 
+.scan-button-group {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.scan-button {
+    flex: 2;
+}
+
+.help-button {
+    flex: 1;
+    padding: var(--spacing-sm);
+}
+
 .series-info {
     background-color: var(--surface-color);
     border-radius: var(--border-radius);

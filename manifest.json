@@ -36,7 +36,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["jszip.min.js", "imageTabWorker.js"], 
+      "resources": ["jszip.min.js", "imageTabWorker.js", "docs/*"], 
       "matches": ["<all_urls>"] 
     }
   ]
