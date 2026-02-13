@@ -6,6 +6,9 @@
 // --- DOM Elements ---
 const scanChaptersBtn = document.getElementById('scanChaptersBtn');
 const downloadBtn = document.getElementById('downloadBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const downloadControls = document.getElementById('downloadControls');
 const manhwaTitleEl = document.getElementById('manhwaTitle');
 const chapterCountEl = document.getElementById('chapterCount');
 const startChapterInput = document.getElementById('startChapter');
@@ -20,6 +23,7 @@ const chapterProgressContainerEl = document.getElementById('chapterProgressConta
 let chapterList = []; // Sorted ASCENDING (Ch 1, Ch 2, ...)
 let currentManhwaTitle = '';
 let isDownloading = false;
+let isPaused = false;
 let isScanning = false;
 let chapterUiElements = {}; // Store chapter UI elements { chapterId: { item, name, status, fill } }
 
@@ -48,6 +52,33 @@ function hideOverallProgress() {
      overallProgressContainerEl.style.display = 'none';
      progressVisual.style.width = '0%';
      progressText.textContent = '';
+}
+
+function showDownloadControls() {
+    downloadControls.style.display = 'flex';
+    downloadBtn.style.display = 'none';
+}
+
+function hideDownloadControls() {
+    downloadControls.style.display = 'none';
+    downloadBtn.style.display = 'flex';
+}
+
+function setPauseState(paused) {
+    isPaused = paused;
+    const icon = pauseBtn.querySelector('.button-icon');
+    const text = pauseBtn.querySelector('span:not(.button-icon)');
+    if (paused) {
+        pauseBtn.classList.add('paused');
+        icon.innerHTML = '<i class="fas fa-play"></i>';
+        text.textContent = 'Resume';
+        setOverallStatus('Paused. Waiting for active tasks to finish...');
+    } else {
+        pauseBtn.classList.remove('paused');
+        icon.innerHTML = '<i class="fas fa-pause"></i>';
+        text.textContent = 'Pause';
+        setOverallStatus('Resuming download...');
+    }
 }
 
 
@@ -260,10 +291,12 @@ downloadBtn.addEventListener('click', () => {
     }
 
     isDownloading = true;
+    isPaused = false;
     downloadBtn.disabled = true;
     scanChaptersBtn.disabled = true;
     clearChapterProgress();
     hideOverallProgress(); // Hide overall bar initially
+    showDownloadControls();
     setOverallStatus(`Starting download for ${chaptersToDownload.length} chapters...`);
 
     // Pre-populate UI
@@ -282,9 +315,36 @@ downloadBtn.addEventListener('click', () => {
          console.error("Error sending startDownload message:", error);
          setOverallStatus(`Error starting download: ${error.message}`, true);
          isDownloading = false;
+         isPaused = false;
+         hideDownloadControls();
+         downloadBtn.style.display = 'flex';
          downloadBtn.disabled = (chapterList.length === 0);
          scanChaptersBtn.disabled = false;
     });
+});
+
+pauseBtn.addEventListener('click', () => {
+    if (!isDownloading) return;
+    
+    if (isPaused) {
+        chrome.runtime.sendMessage({ action: "resumeDownload" }).catch(err => {
+            console.error("Error sending resume message:", err);
+        });
+    } else {
+        chrome.runtime.sendMessage({ action: "pauseDownload" }).catch(err => {
+            console.error("Error sending pause message:", err);
+        });
+    }
+});
+
+stopBtn.addEventListener('click', () => {
+    if (!isDownloading) return;
+    
+    if (confirm("Are you sure you want to stop the download? Current chapters will finish, but remaining chapters will be cancelled.")) {
+        chrome.runtime.sendMessage({ action: "stopDownload" }).catch(err => {
+            console.error("Error sending stop message:", err);
+        });
+    }
 });
 
 // --- Background Message Listener ---
@@ -334,7 +394,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                  hideOverallProgress();
             }
             isDownloading = false;
+            isPaused = false;
+            hideDownloadControls();
             downloadBtn.disabled = (chapterList.length === 0);
+            downloadBtn.style.display = 'flex';
+            scanChaptersBtn.disabled = false;
+            break;
+        }
+        case "downloadPaused": {
+            setPauseState(true);
+            break;
+        }
+        case "downloadResumed": {
+            setPauseState(false);
+            break;
+        }
+        case "downloadStopped": {
+            const { totalChaptersSucceeded, totalChaptersRequested } = message.payload;
+            setOverallStatus(`Download stopped. Completed: ${totalChaptersSucceeded}/${totalChaptersRequested}`, false, false);
+            isDownloading = false;
+            isPaused = false;
+            hideDownloadControls();
+            downloadBtn.disabled = (chapterList.length === 0);
+            downloadBtn.style.display = 'flex';
             scanChaptersBtn.disabled = false;
             break;
         }

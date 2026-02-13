@@ -31,12 +31,16 @@ const ZIP_COMPRESSION_LEVEL = 6;     // JSZip compression level (0-9)
 // --- State ---
 let currentDownloadState = {
     isActive: false,
+    isPaused: false,
+    isStopped: false,
     chaptersRequested: 0,
     chaptersProcessed: 0, // Includes success, skipped, failed
     chaptersSucceeded: 0, // Chapters where download was *initiated*
     chaptersFailed: 0,    // Chapters that failed processing OR download initiation
+    chaptersCancelled: 0, // Chapters cancelled by user
     title: '',
-    activeTabIds: new Set() // Track tabs we opened
+    activeTabIds: new Set(), // Track tabs we opened
+    chapterQueue: [] // Queue of remaining chapters
 };
 let chapterScraperPromises = {}; // { tabId: { resolve, reject, timeoutId } } for scraper response
 let imageTabPromises = {}; // { tabId: { resolve, reject, timeoutId } } for image tab completion
@@ -117,14 +121,43 @@ function sendPopupMessage(action, payload) {
         });
 }
 
+function sendPauseNotification() {
+    sendPopupMessage("downloadPaused", {
+        chaptersRemaining: currentDownloadState.chapterQueue.length,
+        chaptersProcessed: currentDownloadState.chaptersProcessed,
+        chaptersRequested: currentDownloadState.chaptersRequested
+    });
+}
+
+function sendResumeNotification() {
+    sendPopupMessage("downloadResumed", {
+        chaptersRemaining: currentDownloadState.chapterQueue.length
+    });
+}
+
+function sendStopNotification() {
+    sendPopupMessage("downloadStopped", {
+        totalChaptersSucceeded: currentDownloadState.chaptersSucceeded,
+        totalChaptersRequested: currentDownloadState.chaptersRequested,
+        totalChaptersCancelled: currentDownloadState.chaptersCancelled
+    });
+}
+
 function updateOverallProgress(textOverride = null) {
+    if (currentDownloadState.isStopped) return; // Don't update progress if stopped
+    
     const progress = currentDownloadState.chaptersRequested > 0
         ? Math.floor((currentDownloadState.chaptersProcessed / currentDownloadState.chaptersRequested) * 100)
         : 0;
+    
     let statusText = textOverride || `Processed ${currentDownloadState.chaptersProcessed}/${currentDownloadState.chaptersRequested}...`;
 
     if (!textOverride && currentDownloadState.chaptersRequested > 0) {
          statusText += ` (Initiated: ${currentDownloadState.chaptersSucceeded}, Failed/Skipped: ${currentDownloadState.chaptersFailed})`;
+    }
+
+    if (currentDownloadState.isPaused) {
+        statusText = `PAUSED - ${statusText}`;
     }
 
     sendPopupMessage("updateProgress", {
@@ -523,12 +556,16 @@ async function handleBatchDownload(chapters, title) {
 
     console.log(`[Batch] Starting individual chapter downloads for ${chapters.length} chapters. Title: ${title}`);
     currentDownloadState.isActive = true;
+    currentDownloadState.isPaused = false;
+    currentDownloadState.isStopped = false;
     currentDownloadState.chaptersRequested = chapters.length;
     currentDownloadState.chaptersProcessed = 0;
     currentDownloadState.chaptersSucceeded = 0; // Downloads initiated
     currentDownloadState.chaptersFailed = 0;    // Failed or skipped
+    currentDownloadState.chaptersCancelled = 0; // Cancelled by user
     currentDownloadState.title = title;
     currentDownloadState.activeTabIds.clear();
+    currentDownloadState.chapterQueue = [...chapters]; // Store queue in state for pause handling
     chapterScraperPromises = {};
 
     sendPopupMessage("downloadStarted", { totalChapters: chapters.length, title: title });
@@ -539,15 +576,38 @@ async function handleBatchDownload(chapters, title) {
 
 
     // --- Concurrency Control (largely the same) ---
-    let chapterQueue = [...chapters];
     let activeTasks = 0;
     let chapterResults = new Array(chapters.length).fill(null); // Store results { status, chapterName, ... }
 
+    const waitWhilePaused = async () => {
+        while (currentDownloadState.isPaused && !currentDownloadState.isStopped) {
+            await sleep(500);
+        }
+    };
+
     const runTask = async () => {
-        while (chapterQueue.length > 0 || activeTasks > 0) {
-            while (chapterQueue.length > 0 && activeTasks < MAX_CONCURRENT_TABS) {
+        while (currentDownloadState.chapterQueue.length > 0 || activeTasks > 0) {
+            // Wait if paused
+            await waitWhilePaused();
+            
+            // Check if stopped
+            if (currentDownloadState.isStopped) {
+                console.log("[Batch] Download stopped. Cancelling remaining chapters.");
+                // Mark all remaining chapters as cancelled
+                const remainingCount = currentDownloadState.chapterQueue.length;
+                currentDownloadState.chaptersCancelled = remainingCount;
+                currentDownloadState.chapterQueue = [];
+                break;
+            }
+
+            while (currentDownloadState.chapterQueue.length > 0 && activeTasks < MAX_CONCURRENT_TABS) {
+                // Wait if paused before starting new task
+                await waitWhilePaused();
+                
+                if (currentDownloadState.isStopped) break;
+
                 activeTasks++;
-                const chapter = chapterQueue.shift();
+                const chapter = currentDownloadState.chapterQueue.shift();
                 // Calculate original index carefully
                 const chapterIndex = chapters.findIndex(c => c.url === chapter?.url); // Find index based on original array
 
@@ -600,6 +660,11 @@ async function handleBatchDownload(chapters, title) {
             } // End inner while loop (task starting)
 
             if (activeTasks > 0) {
+                // Wait while paused or stopped
+                await waitWhilePaused();
+                
+                if (currentDownloadState.isStopped) break;
+                
                 updateOverallProgress(`Waiting for ${activeTasks} tasks...`);
                 await sleep(500);
             }
@@ -615,7 +680,25 @@ async function handleBatchDownload(chapters, title) {
          const successfulDownloads = currentDownloadState.chaptersSucceeded;
          const failedOrSkipped = currentDownloadState.chaptersFailed;
 
-         if (successfulDownloads === 0) {
+         if (currentDownloadState.isStopped) {
+             // Download was stopped by user
+             const cancelled = currentDownloadState.chaptersCancelled;
+             const finalMessage = `⬛ Download Stopped: Completed ${successfulDownloads}, Failed/Skipped ${failedOrSkipped}, Cancelled ${cancelled}.`;
+             console.log(`[Batch] ${finalMessage}`);
+             sendStopNotification();
+             // Also send downloadComplete for cleanup
+             currentDownloadState.isActive = false;
+             if (currentDownloadState.activeTabIds.size > 0) {
+                  for (const tabId of currentDownloadState.activeTabIds) {
+                       chrome.tabs.remove(tabId).catch(e => { /* Ignore */ });
+                  }
+                  currentDownloadState.activeTabIds.clear();
+             }
+             chapterScraperPromises = {};
+             return;
+         }
+
+         if (successfulDownloads === 0 && failedOrSkipped > 0) {
              console.warn("[Batch] No chapter downloads were successfully initiated.");
              throw new Error(`Failed to initiate download for any chapters (Failed/Skipped: ${failedOrSkipped}).`);
          }
@@ -702,6 +785,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.warn(`[Msg Listener] Received imageTabDone for unknown Tab ${tabId}:`, message);
         }
         messageHandled = true;
+
+    } else if (message.action === "pauseDownload") {
+        console.log("[Msg Listener] Received pauseDownload request.");
+        if (currentDownloadState.isActive && !currentDownloadState.isPaused && !currentDownloadState.isStopped) {
+            currentDownloadState.isPaused = true;
+            console.log("[Batch] Download paused. Waiting for active tasks to finish...");
+            sendPauseNotification();
+        }
+        messageHandled = true;
+
+    } else if (message.action === "resumeDownload") {
+        console.log("[Msg Listener] Received resumeDownload request.");
+        if (currentDownloadState.isActive && currentDownloadState.isPaused && !currentDownloadState.isStopped) {
+            currentDownloadState.isPaused = false;
+            console.log("[Batch] Download resumed.");
+            sendResumeNotification();
+        }
+        messageHandled = true;
+
+    } else if (message.action === "stopDownload") {
+        console.log("[Msg Listener] Received stopDownload request.");
+        if (currentDownloadState.isActive && !currentDownloadState.isStopped) {
+            currentDownloadState.isStopped = true;
+            currentDownloadState.isPaused = false; // Resume from pause if stopped
+            console.log("[Batch] Download stop requested. Will stop after current tasks finish...");
+            // Don't send stopNotification yet - it will be sent when all tasks complete
+        }
+        messageHandled = true;
     }
 
     // Return false as we are not using sendResponse asynchronously here.
@@ -712,7 +823,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // (Identical to original)
 chrome.runtime.onInstalled.addListener(details => {
     console.log('WebtoonScan Downloader (Individual Zips) installed/updated.', details.reason);
-    currentDownloadState = { isActive: false, chaptersRequested: 0, chaptersProcessed: 0, chaptersSucceeded: 0, chaptersFailed: 0, title: '', activeTabIds: new Set() };
+    currentDownloadState = { 
+        isActive: false, 
+        isPaused: false, 
+        isStopped: false,
+        chaptersRequested: 0, 
+        chaptersProcessed: 0, 
+        chaptersSucceeded: 0, 
+        chaptersFailed: 0,
+        chaptersCancelled: 0,
+        title: '', 
+        activeTabIds: new Set(),
+        chapterQueue: []
+    };
     chapterScraperPromises = {};
     chrome.storage.local.clear();
 });

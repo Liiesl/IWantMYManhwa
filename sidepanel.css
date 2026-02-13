@@ -328,4 +328,29 @@ input[type="number"]:focus {
   border-radius: 2px;
 }
 
+.download-button {
+    margin-bottom: var(--spacing-md);
+}
+
+.download-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.download-controls .action-button {
+    flex: 1;
+}
+
+.pause-button {
+    background-color: #ff9800;
+}
+
+.stop-button {
+    background-color: #f44336;
+}
+
+.pause-button.paused {
+    background-color: #4CAF50;
+}
+
 /* ... (keep MutationObserver styles for #progressBar) ... */
