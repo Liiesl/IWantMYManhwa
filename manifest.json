@@ -31,6 +31,9 @@
   "icons": {
     "48": "icons/icon48.png" 
   },
+  "action": {
+    "default_title": "Open Side Panel"
+  },
   "web_accessible_resources": [
     {
       "resources": ["jszip.min.js", "imageTabWorker.js"], 

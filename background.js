@@ -717,6 +717,8 @@ chrome.runtime.onInstalled.addListener(details => {
     chrome.storage.local.clear();
 });
 
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
