@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "IWantMYManhwa",
-  "version": "1.3",
-  "description": "Downloads manhwa chapters in bulk from webtoonscan.com as ZIP files via the side panel, using tabs for scraping.",
+  "version": "1.4",
+  "description": "Downloads manhwa chapters in bulk from multiple sites as ZIP files via the side panel.",
   "permissions": [
     "sidePanel",
     "activeTab",
@@ -36,7 +36,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["jszip.min.js", "imageTabWorker.js", "docs/*"], 
+      "resources": [
+        "jszip.min.js",
+        "imageTabWorker.js",
+        "docs/*",
+        "sites/*.js"
+      ],
       "matches": ["<all_urls>"] 
     }
   ]

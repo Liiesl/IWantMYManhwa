@@ -466,9 +466,23 @@ function showMainContentUI() {
 async function checkSiteSupport() {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.url && tab.url.includes("webtoonscan.com/manhwa/")) {
+        if (!tab?.url) {
+            showUnsupportedSiteUI();
+            return false;
+        }
+
+        // Initialize site registry if not already done
+        if (typeof siteRegistry !== 'undefined') {
+            siteRegistry.initialize();
+        }
+
+        // Check if current URL is supported by any adapter
+        const isSupported = typeof siteRegistry !== 'undefined' && siteRegistry.isSupported(tab.url);
+        
+        if (isSupported) {
+            const adapter = siteRegistry.findAdapterForUrl(tab.url);
             showMainContentUI();
-            setOverallStatus("Ready. Click 'Scan'.");
+            setOverallStatus(`Ready. Site: ${adapter?.name || 'Supported'}. Click 'Scan'.`);
             scanChaptersBtn.disabled = false;
             downloadBtn.disabled = true;
             return true;

@@ -16,6 +16,24 @@ try {
 
 console.log("WebtoonScan Downloader (Refactored/Individual Zips): Background service worker started.");
 
+// --- Load Site Adapters ---
+try {
+    importScripts(
+        'sites/SiteAdapter.js',
+        'sites/webtoonscan/WebtoonscanContentAdapter.js',
+        'sites/webtoonscan/WebtoonscanAdapter.js',
+        'sites/SiteRegistry.js'
+    );
+    console.log("Site adapters loaded successfully.");
+    
+    // Initialize registry
+    if (typeof siteRegistry !== 'undefined') {
+        siteRegistry.initialize();
+    }
+} catch (e) {
+    console.error("Failed to load site adapters:", e);
+}
+
 // --- Configuration ---
 const MAX_CONCURRENT_TABS = 3; // Max parallel chapter processing tabs
 const TAB_LOAD_TIMEOUT_MS = 60000; // 60 seconds timeout for a chapter tab to load
@@ -304,236 +322,48 @@ async function triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPref
 
 
 // --- Process Single Chapter (Downloads its own ZIP) ---
-// Removed batchZip parameter
-async function processSingleChapter(chapter, chapterIndex, totalChapters, seriesTitle) {
-    let chapterTab = null;
-    let chapterTabId = null;
+// Delegates to adapter for download logic
+async function processSingleChapter(chapter, chapterIndex, totalChapters, seriesTitle, adapter) {
     const chapterLogPrefix = `[Ch ${chapterIndex + 1}/${totalChapters} "${chapter.name}"]`;
-    // Keep sanitizing the name part for the filename
-    const sanitizedChapterNamePart = sanitizeFilename(chapter.name || `Chapter_${chapterIndex + 1}`, true);
     const chapterDataForUi = { chapterId: chapter.url, chapterName: chapter.name };
 
-    let imageUrls = null;
-    let validImageUrls = null;
-
     console.log(`${chapterLogPrefix} Starting processing...`);
-    sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "starting", message: "Opening tab..." });
+    
+    // Status update helper
+    const updateStatus = (status, message) => {
+        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status, message });
+    };
 
+    updateStatus("starting", "Opening tab...");
+
+    // If no adapter provided, try to get one from chapter URL
+    if (!adapter && typeof siteRegistry !== 'undefined') {
+        adapter = siteRegistry.findAdapterForUrl(chapter.url);
+    }
+
+    if (!adapter) {
+        console.error(`${chapterLogPrefix} No adapter found for chapter URL: ${chapter.url}`);
+        updateStatus("failed", "No adapter for this site");
+        return { status: 'failed', chapterName: chapter.name, error: "No adapter found" };
+    }
+
+    console.log(`${chapterLogPrefix} Using adapter: ${adapter.name}`);
+
+    // Delegate to adapter's downloadChapter method
     try {
-        // 1. Open chapter tab
-        // (Code identical to original - creating tab, waiting for load)
-        console.log(`${chapterLogPrefix} Creating tab for URL: ${chapter.url}`);
-        chapterTab = await chrome.tabs.create({ url: chapter.url, active: false });
-        chapterTabId = chapterTab.id;
-        if (!chapterTabId) throw new Error("Failed to create tab.");
-        currentDownloadState.activeTabIds.add(chapterTabId);
-        console.log(`${chapterLogPrefix} Created tab ID: ${chapterTabId}`);
-        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "loading", message: "Waiting for page..." });
-
-        await new Promise((resolve, reject) => {
-            const listener = (tabId, changeInfo, tab) => {
-                if (tabId === chapterTabId && changeInfo.status === 'complete') {
-                    if (tab.url && (tab.url.startsWith(chapter.url.substring(0,30)) || tab.url.includes("chapter") || tab.url.includes(sanitizeFilename(chapter.name || '').substring(0,10)))) {
-                        console.log(`${chapterLogPrefix} Tab ${chapterTabId} loaded successfully at ${tab.url}`);
-                        clearTimeout(timeoutId);
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        resolve();
-                     } else {
-                        console.warn(`${chapterLogPrefix} Tab ${chapterTabId} loaded but URL changed unexpectedly to: ${tab.url} (Original: ${chapter.url})`);
-                        clearTimeout(timeoutId);
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        resolve(); // Still resolve, let scraping fail if it's wrong page
-                     }
-                } else if (tabId === chapterTabId && (changeInfo.status === 'error' || tab.status === 'unloaded')) {
-                     console.error(`${chapterLogPrefix} Tab ${chapterTabId} encountered error or unloaded during load.`);
-                     clearTimeout(timeoutId);
-                     chrome.tabs.onUpdated.removeListener(listener);
-                     reject(new Error(`Tab failed to load (status: ${changeInfo.status || tab.status})`));
-                }
-            };
-            const timeoutId = setTimeout(() => {
-                chrome.tabs.onUpdated.removeListener(listener);
-                console.error(`${chapterLogPrefix} Timeout waiting for tab ${chapterTabId} to load.`);
-                chrome.tabs.remove(chapterTabId).catch(()=>{/*ignore*/});
-                currentDownloadState.activeTabIds.delete(chapterTabId);
-                reject(new Error(`Timeout loading tab (${(TAB_LOAD_TIMEOUT_MS / 1000)}s)`));
-            }, TAB_LOAD_TIMEOUT_MS);
-            chrome.tabs.onUpdated.addListener(listener);
-        });
-
-        // 2. Inject content script and get images
-        // (Code identical to original - injecting, sending message, waiting for response)
-        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "scraping", message: "Finding images..." });
-        console.log(`${chapterLogPrefix} Injecting scraper into tab ${chapterTabId}`);
-        let imageUrls = [];
-        try {
-             try {
-                 await chrome.scripting.executeScript({ target: { tabId: chapterTabId }, files: ['chapterScraper.js'] });
-             } catch (injectionError) {
-                 console.error(`${chapterLogPrefix} Failed to inject script into tab ${chapterTabId}: ${injectionError.message}`);
-                 throw new Error(`Script injection failed: ${injectionError.message}`);
-             }
-             console.log(`${chapterLogPrefix} Scraper injected. Requesting images...`);
-             imageUrls = await new Promise((resolve, reject) => {
-                 const timeoutId = setTimeout(() => { delete chapterScraperPromises[chapterTabId]; reject(new Error(`Timeout waiting for scraper response (${(SCRIPT_RESPONSE_TIMEOUT_MS / 1000)}s)`)); }, SCRIPT_RESPONSE_TIMEOUT_MS);
-                 chapterScraperPromises[chapterTabId] = { resolve, reject, timeoutId };
-                 chrome.tabs.sendMessage(chapterTabId, { action: "getChapterImages" })
-                     .catch(err => { clearTimeout(timeoutId); delete chapterScraperPromises[chapterTabId]; reject(new Error(`Content script communication failed: ${err.message}`)); });
-             });
-             if (!Array.isArray(imageUrls)) throw new Error("Content script did not return a valid image URL array.");
-             console.log(`${chapterLogPrefix} Received ${imageUrls.length} image URLs from scraper.`);
-        } catch (scriptError) {
-            console.error(`${chapterLogPrefix} Failed to inject script or get response: ${scriptError.message}`);
-            throw new Error(`Scraping failed: ${scriptError.message}`);
-        }
-
-        validImageUrls = imageUrls.filter(url => url && typeof url === 'string' && url.startsWith('http'));
-        const totalImagesToFetch = validImageUrls.length;
-
-        if (totalImagesToFetch === 0) {
-             console.warn(`${chapterLogPrefix} No valid image URLs found by scraper.`);
-             sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "skipped", message: "No images found" });
-             return { status: 'skipped', chapterName: sanitizedChapterNamePart, message: "No images found" };
-        }
-        console.log(`${chapterLogPrefix} Found ${totalImagesToFetch} valid URLs. Opening image tab...`);
-
-        // Close chapter tab - we only needed it to scrape URLs
-        if (chapterTabId) {
-            try {
-                await chrome.tabs.remove(chapterTabId);
-                console.log(`${chapterLogPrefix} Closed chapter tab ${chapterTabId}.`);
-            } catch (removeError) {
-                if (removeError.message && !removeError.message.includes("No tab with id")) {
-                    console.warn(`${chapterLogPrefix} Could not remove chapter tab: ${removeError.message}`);
-                }
-            }
-            currentDownloadState.activeTabIds.delete(chapterTabId);
-            delete chapterScraperPromises[chapterTabId];
-            chapterTabId = null;
-        }
-
-        // Open image tab to first image URL (cdn4)
-        const firstImageUrl = validImageUrls[0];
-        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "fetching", message: "Opening image tab..." });
-        
-        let imageTabId = null;
-        let imageTab = null;
-        try {
-            console.log(`${chapterLogPrefix} Creating image tab for URL: ${firstImageUrl}`);
-            imageTab = await chrome.tabs.create({ url: firstImageUrl, active: false });
-            imageTabId = imageTab.id;
-            if (!imageTabId) throw new Error("Failed to create image tab.");
-            currentDownloadState.activeTabIds.add(imageTabId);
-            console.log(`${chapterLogPrefix} Created image tab ID: ${imageTabId}`);
-
-            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "loading", message: "Waiting for image tab..." });
-
-            // Wait for tab to load
-            await new Promise((resolve, reject) => {
-                const listener = (tabId, changeInfo, tab) => {
-                    if (tabId === imageTabId && changeInfo.status === 'complete') {
-                        console.log(`${chapterLogPrefix} Image tab ${imageTabId} loaded.`);
-                        clearTimeout(timeoutId);
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        resolve();
-                    } else if (tabId === imageTabId && (changeInfo.status === 'error' || tab.status === 'unloaded')) {
-                        clearTimeout(timeoutId);
-                        chrome.tabs.onUpdated.removeListener(listener);
-                        reject(new Error(`Image tab failed to load (status: ${changeInfo.status || tab.status})`));
-                    }
-                };
-                const timeoutId = setTimeout(() => {
-                    chrome.tabs.onUpdated.removeListener(listener);
-                    reject(new Error(`Timeout loading image tab (${(TAB_LOAD_TIMEOUT_MS / 1000)}s)`));
-                }, TAB_LOAD_TIMEOUT_MS);
-                chrome.tabs.onUpdated.addListener(listener);
-            });
-
-            // Inject jszip.min.js first, then imageTabWorker.js
-            try {
-                await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
-                console.log(`${chapterLogPrefix} Injected jszip.min.js into image tab.`);
-                await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
-                console.log(`${chapterLogPrefix} Injected imageTabWorker.js into image tab.`);
-            } catch (injectionError) {
-                throw new Error(`Script injection failed: ${injectionError.message}`);
-            }
-
-            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "fetching", message: "Processing images..." });
-
-            // Send data to image tab worker
-            const workerData = {
-                imageUrls: validImageUrls,
-                seriesTitle: seriesTitle,
-                chapterName: chapter.name,
-                chapterIndex: chapterIndex
-            };
-
-            // Wait for image tab to complete
-            const imageTabResult = await new Promise((resolve, reject) => {
-                const timeoutId = setTimeout(() => {
-                    delete imageTabPromises[imageTabId];
-                    reject(new Error(`Timeout waiting for image tab (${(SCRIPT_RESPONSE_TIMEOUT_MS / 1000)}s)`));
-                }, SCRIPT_RESPONSE_TIMEOUT_MS);
-                imageTabPromises[imageTabId] = { resolve, reject, timeoutId };
-
-                chrome.tabs.sendMessage(imageTabId, { action: "processImages", data: workerData })
-                    .catch(err => {
-                        clearTimeout(timeoutId);
-                        delete imageTabPromises[imageTabId];
-                        reject(new Error(`Failed to send message to image tab: ${err.message}`));
-                    });
-            });
-
-            console.log(`${chapterLogPrefix} Image tab result:`, imageTabResult);
-
-            if (imageTabResult.status === 'success') {
-                const finalMessage = imageTabResult.failedImages > 0 ? `Downloaded (${imageTabResult.failedImages} img failed)` : "Downloaded";
-                sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "complete", message: finalMessage });
-                return { status: 'success', chapterName: sanitizedChapterNamePart, failedImages: imageTabResult.failedImages };
-            } else {
-                throw new Error(imageTabResult.error || 'Image tab processing failed');
-            }
-
-        } catch (imageProcessError) {
-            console.error(`${chapterLogPrefix} Image processing failed:`, imageProcessError);
-            sendPopupMessage("updateChapterStatus", {
-                ...chapterDataForUi,
-                status: "failed",
-                message: `Error: ${imageProcessError.message.substring(0, 50)}...`
-            });
-            return { status: 'failed', chapterName: sanitizedChapterNamePart, error: imageProcessError.message };
-
-        } finally {
-            // Wait for download to start before closing tab
-            await sleep(2000);
-
-            if (imageTabId) {
-                try {
-                    await chrome.tabs.remove(imageTabId);
-                    console.log(`${chapterLogPrefix} Closed image tab ${imageTabId}.`);
-                } catch (removeError) {
-                    if (removeError.message && !removeError.message.includes("No tab with id")) {
-                        console.warn(`${chapterLogPrefix} Could not remove image tab: ${removeError.message}`);
-                    }
-                }
-                currentDownloadState.activeTabIds.delete(imageTabId);
-                delete imageTabPromises[imageTabId];
-            }
-            await sleep(DELAY_AFTER_TASK_FINISH_MS);
-        }
-
+        const result = await adapter.downloadChapter(
+            { chapter, index: chapterIndex, activeTabIds: currentDownloadState.activeTabIds },
+            seriesTitle,
+            updateStatus,
+            { sendPopupMessage }
+        );
+        return result;
     } catch (error) {
-        console.error(`${chapterLogPrefix} Error processing chapter:`, error);
-        sendPopupMessage("updateChapterStatus", {
-            ...chapterDataForUi,
-            status: "failed",
-            message: `Error: ${error.message.substring(0, 50)}...`
-        });
-        return { status: 'failed', chapterName: sanitizedChapterNamePart, error: error.message };
+        console.error(`${chapterLogPrefix} Adapter download failed:`, error);
+        updateStatus("failed", error.message);
+        return { status: 'failed', chapterName: chapter.name, error: error.message };
     }
 }
-
 
 // --- Batch Download Orchestrator (Manages Tasks) ---
 async function handleBatchDownload(chapters, title) {
@@ -625,12 +455,30 @@ async function handleBatchDownload(chapters, title) {
                 console.log(`[Batch] Starting task ${chapterIndex + 1}/${chapters.length} for Ch "${chapter.name}". Active: ${activeTasks}`);
                 updateOverallProgress(`Processing Ch. ${chapter.name}... (${activeTasks} active)`);
 
+                // Get adapter for this chapter
+                let adapter = null;
+                if (typeof siteRegistry !== 'undefined') {
+                    adapter = siteRegistry.findAdapterForUrl(chapter.url);
+                }
+
+                if (!adapter) {
+                    console.warn(`[Batch] No adapter found for chapter: ${chapter.url}`);
+                    currentDownloadState.chaptersProcessed++;
+                    currentDownloadState.chaptersFailed++;
+                    chapterResults[chapterIndex] = { status: 'skipped', chapterName: chapter.name, error: "No adapter found" };
+                    activeTasks--;
+                    updateOverallProgress();
+                    continue;
+                }
+
+                console.log(`[Batch] Using adapter: ${adapter.name} for chapter`);
+
                 // Process the chapter asynchronously (which now includes zipping and download)
                 (async () => {
                     let result;
                     try {
-                        // Pass series title for filename generation
-                        result = await processSingleChapter(chapter, chapterIndex, chapters.length, currentDownloadState.title);
+                        // Pass adapter to processSingleChapter
+                        result = await processSingleChapter(chapter, chapterIndex, chapters.length, currentDownloadState.title, adapter);
                     } catch (error) {
                         console.error(`[Batch] UNEXPECTED error from processSingleChapter for Ch ${chapter.name} (Index: ${chapterIndex}):`, error);
                         result = { status: 'failed', chapterName: chapter.name, error: `Unexpected Orchestrator Error: ${error.message}` };

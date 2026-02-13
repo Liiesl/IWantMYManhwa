@@ -1,6 +1,8 @@
-# IWantMYManhwa - Manhwa/Manhua/Manga Downloader
+# IWantMYManhwa - Multi-Site Manhwa/Manhua/Manga Downloader
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) A Manifest V3 Chrome extension using the **Side Panel** API to simplify downloading chapters from your favorite Manhwa, Manhua, or Manga websites. Download entire series or selected chapters in bulk via a persistent side interface.
+
+**Now with multi-site support!** Easily add support for new sites by creating simple adapter files.
 
 ## Table of Contents
 
@@ -15,11 +17,12 @@
   - [License](#license)
 
 ## Features
+* **Multi-Site Support:** Extensible adapter system allows easy addition of new sites
 * **Bulk Downloading:** Download multiple chapters simultaneously.
 * **Side Panel Interface:** Utilizes Chrome's Side Panel for an easily accessible and persistent UI while Browse.
 * **Simple Controls:** Easy selection of chapters and download initiation within the side panel.
 * **Manifest V3:** Built using the latest Chrome extension platform standards for improved security, performance, and privacy.
-* **[Add any other specific features, e.g., Image Format Options, Naming Conventions, etc.]**
+* **Auto-Detection:** Automatically detects supported sites and adapts scraping logic
 
 ## Supported Websites
 
@@ -86,6 +89,45 @@ You need to install it manually using Developer Mode:
 * **Copyright:** This tool is intended for personal use and convenience (e.g., offline reading). Downloading copyrighted material may infringe on the rights of owners and publishers. Please respect copyright laws and support creators by reading on official platforms. The developers of this extension are not responsible for user misuse.
 * **Website Compatibility:** Websites frequently change their structure, which can break the extension's functionality. We cannot guarantee permanent compatibility with any specific site. Support status reflects the latest testing but can become outdated quickly.
 * **Use At Your Own Risk:** This extension interacts with third-party websites. While developed with care, unforeseen issues or conflicts could arise. Use this extension at your own discretion and risk. Excessive downloading might also lead to temporary IP bans from the source websites.
+
+## Adding New Site Support
+
+The extension uses an **adapter pattern** for multi-site support. To add a new site:
+
+1. **Create a new adapter** in `sites/YourSiteAdapter.js` extending `SiteAdapter`
+2. **Implement required methods:** `getChapterListSelectors()`, `getTitleSelectors()`, `getImageSelectors()`, `isChapterUrl()`
+3. **Register the adapter** in `sites/SiteRegistry.js`
+4. **Update `manifest.json`** with new host permissions
+5. **Add adapter script** to `sidepanel.html`
+
+See [`sites/README.md`](sites/README.md) for detailed documentation and examples.
+
+### Quick Example
+
+```javascript
+// sites/ExampleAdapter.js
+class ExampleAdapter extends SiteAdapter {
+    constructor() {
+        super({ name: 'Example', domains: ['example.com'] });
+    }
+    
+    getChapterListSelectors() {
+        return ['div.chapters a'];
+    }
+    
+    getTitleSelectors() {
+        return ['h1.title'];
+    }
+    
+    getImageSelectors() {
+        return ['div.reader img'];
+    }
+    
+    isChapterUrl(url) {
+        return /example\.com\/chapter\//.test(url);
+    }
+}
+```
 
 ## Contributing
 
