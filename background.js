@@ -200,7 +200,6 @@ async function fetchSingleImage(imageUrl, logPrefix) {
 // --- Trigger Single Chapter ZIP Download ---
 async function triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPrefix, chapterDataForUi) {
     let zipBlob = null;
-    let zipDataUrl = null;
     try {
         console.log(`${chapterLogPrefix} Generating ZIP blob for ${zipFilename}...`);
         sendPopupMessage("updateChapterStatus", {
@@ -234,25 +233,24 @@ async function triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPref
             message: `Starting download...`
         });
 
-        // Convert blob to data URL for download API
-        zipDataUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = (e) => reject(new Error(`FileReader failed: ${e.target.error}`));
-            reader.readAsDataURL(zipBlob);
-        });
+        // Create object URL for download (avoids base64 memory overhead)
+        const objectUrl = URL.createObjectURL(zipBlob);
         zipBlob = null;
 
         // Trigger download
         const downloadId = await chrome.downloads.download({
-            url: zipDataUrl,
+            url: objectUrl,
             filename: zipFilename,
-            saveAs: false // Let browser handle duplicates etc.
+            saveAs: false
         });
 
         if (!downloadId) {
+            URL.revokeObjectURL(objectUrl);
             throw new Error("Download initiation failed (chrome.downloads.download returned undefined).");
         }
+
+        // Revoke URL after download starts (browser has copied the data)
+        URL.revokeObjectURL(objectUrl);
         console.log(`${chapterLogPrefix} Download initiated with ID: ${downloadId} for ${zipFilename}`);
         return { success: true, downloadId: downloadId };
 
@@ -265,7 +263,6 @@ async function triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPref
         });
         return { success: false, error: error.message };
     } finally {
-        zipDataUrl = null;
         zipBlob = null;
         console.log(`${chapterLogPrefix} triggerChapterZipDownload cleanup executed.`)
     }
