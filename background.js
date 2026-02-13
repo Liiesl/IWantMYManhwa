@@ -39,6 +39,7 @@ let currentDownloadState = {
     activeTabIds: new Set() // Track tabs we opened
 };
 let chapterScraperPromises = {}; // { tabId: { resolve, reject, timeoutId } } for scraper response
+let imageTabPromises = {}; // { tabId: { resolve, reject, timeoutId } } for image tab completion
 
 // --- Utility Functions ---
 function sleep(ms) {
@@ -279,7 +280,6 @@ async function processSingleChapter(chapter, chapterIndex, totalChapters, series
     const sanitizedChapterNamePart = sanitizeFilename(chapter.name || `Chapter_${chapterIndex + 1}`, true);
     const chapterDataForUi = { chapterId: chapter.url, chapterName: chapter.name };
 
-    let chapterZip = null;
     let imageUrls = null;
     let validImageUrls = null;
 
@@ -362,113 +362,132 @@ async function processSingleChapter(chapter, chapterIndex, totalChapters, series
              sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "skipped", message: "No images found" });
              return { status: 'skipped', chapterName: sanitizedChapterNamePart, message: "No images found" };
         }
-        console.log(`${chapterLogPrefix} Found ${totalImagesToFetch} valid URLs. Starting download...`);
+        console.log(`${chapterLogPrefix} Found ${totalImagesToFetch} valid URLs. Opening image tab...`);
 
-        // --- MODIFIED: Create Chapter-Specific ZIP and Folder (Natural Numbering) ---
-        chapterZip = new JSZip();
-        // Extract the chapter number string (e.g., "1", "10.5", "123")
-        const chapterNumberStr = extractChapterNumber(chapter.name, chapterIndex);
-        // *** CHANGE: Use the raw chapter number string for the internal folder name ***
-        const internalFolderName = chapterNumberStr;
-
-        // Create the folder inside this chapter's zip
-        const numberedFolder = chapterZip.folder(internalFolderName);
-        if (!numberedFolder) {
-             throw new Error(`Failed to create internal zip folder: ${internalFolderName}`);
-        }
-        console.log(`${chapterLogPrefix} Created internal zip folder: ${internalFolderName}`);
-
-        sendPopupMessage("updateChapterStatus", {
-             ...chapterDataForUi,
-             status: "fetching",
-             message: `Downloading 0/${totalImagesToFetch}...`
-        });
-
-        // 3. Download images for the chapter and add to the chapter-specific zip
-        let downloadedCount = 0;
-        let failedImageCount = 0;
-        for (let i = 0; i < totalImagesToFetch; i++) {
-            const imageUrl = validImageUrls[i];
-            const imageLogPrefix = `${chapterLogPrefix} Img ${i + 1}/${totalImagesToFetch}`;
-            let blob = null;
+        // Close chapter tab - we only needed it to scrape URLs
+        if (chapterTabId) {
             try {
-                if (blob) {
-                    // Determine file extension (code identical)
-                    let fileExtension = 'jpg';
-                    // ... (mime type / URL extension logic remains the same) ...
-                    if (blob.type && blob.type.startsWith('image/')) {
-                        const subtype = blob.type.split('/')[1];
-                        if (subtype && ['jpeg', 'png', 'gif', 'webp', 'bmp'].includes(subtype)) {
-                            fileExtension = subtype === 'jpeg' ? 'jpg' : subtype;
-                        }
-                    } else {
-                        try { /* URL fallback */
-                            const urlPath = new URL(imageUrl).pathname;
-                            const lastDot = urlPath.lastIndexOf('.');
-                            if (lastDot > 0 && lastDot < urlPath.length - 1) {
-                                const ext = urlPath.substring(lastDot + 1).toLowerCase();
-                                if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) {
-                                    fileExtension = ext === 'jpeg' ? 'jpg' : ext;
-                                }
-                            }
-                        } catch (urlParseError) { /* ignore */ }
-                    }
-                    // *** KEEP PADDING for image filenames ***
-                    const imageFilename = `${padNumber(i + 1, 3)}.${fileExtension}`;
-
-                    try {
-                        // Add to numbered folder in chapterZip
-                        numberedFolder.file(imageFilename, blob, { binary: true });
-                        downloadedCount++;
-                        if (downloadedCount % 5 === 0 || downloadedCount === totalImagesToFetch) {
-                            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "fetching", message: `Downloading ${downloadedCount}/${totalImagesToFetch}...` });
-                        }
-                    } catch (zipFileError) {
-                        console.error(`${imageLogPrefix} Error adding file to zip: ${zipFileError}`);
-                        failedImageCount++;
-                        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "error", message: `Zip error for img ${i + 1}!` });
-                    }
-                } else {
-                    failedImageCount++;
-                    sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "error", message: `Failed img ${i + 1}/${totalImagesToFetch}` });
+                await chrome.tabs.remove(chapterTabId);
+                console.log(`${chapterLogPrefix} Closed chapter tab ${chapterTabId}.`);
+            } catch (removeError) {
+                if (removeError.message && !removeError.message.includes("No tab with id")) {
+                    console.warn(`${chapterLogPrefix} Could not remove chapter tab: ${removeError.message}`);
                 }
-            } finally {
-
             }
-        } // End image fetch loop
-
-        // 4. Finalize chapter status based on image fetching
-        if (downloadedCount === 0 && totalImagesToFetch > 0) {
-            console.error(`${chapterLogPrefix} All ${totalImagesToFetch} images failed to download.`);
-            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "failed", message: "All images failed" });
-            return { status: 'failed', chapterName: sanitizedChapterNamePart, failedImages: failedImageCount, message: "All images failed" };
+            currentDownloadState.activeTabIds.delete(chapterTabId);
+            delete chapterScraperPromises[chapterTabId];
+            chapterTabId = null;
         }
 
-        const partialSuccess = failedImageCount > 0;
-        const statusMsg = partialSuccess ? `Done (${failedImageCount} failed)` : "Images downloaded";
-        console.log(`${chapterLogPrefix} Finished image fetching. ${statusMsg}`);
-        sendPopupMessage("updateChapterStatus", {
-            ...chapterDataForUi,
-            status: partialSuccess ? "complete_partial" : "complete_fetch",
-            message: statusMsg
-        });
+        // Open image tab to first image URL (cdn4)
+        const firstImageUrl = validImageUrls[0];
+        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "fetching", message: "Opening image tab..." });
+        
+        let imageTabId = null;
+        let imageTab = null;
+        try {
+            console.log(`${chapterLogPrefix} Creating image tab for URL: ${firstImageUrl}`);
+            imageTab = await chrome.tabs.create({ url: firstImageUrl, active: false });
+            imageTabId = imageTab.id;
+            if (!imageTabId) throw new Error("Failed to create image tab.");
+            currentDownloadState.activeTabIds.add(imageTabId);
+            console.log(`${chapterLogPrefix} Created image tab ID: ${imageTabId}`);
 
-        // 5. --- NEW: Generate and Trigger Download for THIS chapter's ZIP ---
-        const sanitizedSeriesTitle = sanitizeFilename(seriesTitle || 'WebtoonScan_Download', true);
-        // *** CHANGE: Use the raw chapterNumberStr in the filename, not padded ***
-        const zipFilename = `${sanitizedSeriesTitle}_Ch_${chapterNumberStr}_(${sanitizedChapterNamePart}).zip`;
+            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "loading", message: "Waiting for image tab..." });
 
-        // Trigger the download for THIS chapter's ZIP
-        const downloadResult = await triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPrefix, chapterDataForUi);
+            // Wait for tab to load
+            await new Promise((resolve, reject) => {
+                const listener = (tabId, changeInfo, tab) => {
+                    if (tabId === imageTabId && changeInfo.status === 'complete') {
+                        console.log(`${chapterLogPrefix} Image tab ${imageTabId} loaded.`);
+                        clearTimeout(timeoutId);
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        resolve();
+                    } else if (tabId === imageTabId && (changeInfo.status === 'error' || tab.status === 'unloaded')) {
+                        clearTimeout(timeoutId);
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        reject(new Error(`Image tab failed to load (status: ${changeInfo.status || tab.status})`));
+                    }
+                };
+                const timeoutId = setTimeout(() => {
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    reject(new Error(`Timeout loading image tab (${(TAB_LOAD_TIMEOUT_MS / 1000)}s)`));
+                }, TAB_LOAD_TIMEOUT_MS);
+                chrome.tabs.onUpdated.addListener(listener);
+            });
 
-        if (downloadResult.success) {
-             const finalMessage = partialSuccess ? `Downloaded (${failedImageCount} img failed)` : "Downloaded";
-             sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "complete", message: finalMessage });
-             console.log(`${chapterLogPrefix} Successfully initiated download for ${zipFilename}`);
-             return { status: 'success', chapterName: sanitizedChapterNamePart, failedImages: failedImageCount };
-        } else {
-             console.error(`${chapterLogPrefix} Failed to initiate download for ${zipFilename}. Error: ${downloadResult.error}`);
-             return { status: 'failed', chapterName: sanitizedChapterNamePart, failedImages: failedImageCount, message: `Download failed: ${downloadResult.error}` };
+            // Inject jszip.min.js first, then imageTabWorker.js
+            try {
+                await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
+                console.log(`${chapterLogPrefix} Injected jszip.min.js into image tab.`);
+                await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
+                console.log(`${chapterLogPrefix} Injected imageTabWorker.js into image tab.`);
+            } catch (injectionError) {
+                throw new Error(`Script injection failed: ${injectionError.message}`);
+            }
+
+            sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "fetching", message: "Processing images..." });
+
+            // Send data to image tab worker
+            const workerData = {
+                imageUrls: validImageUrls,
+                seriesTitle: seriesTitle,
+                chapterName: chapter.name,
+                chapterIndex: chapterIndex
+            };
+
+            // Wait for image tab to complete
+            const imageTabResult = await new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    delete imageTabPromises[imageTabId];
+                    reject(new Error(`Timeout waiting for image tab (${(SCRIPT_RESPONSE_TIMEOUT_MS / 1000)}s)`));
+                }, SCRIPT_RESPONSE_TIMEOUT_MS);
+                imageTabPromises[imageTabId] = { resolve, reject, timeoutId };
+
+                chrome.tabs.sendMessage(imageTabId, { action: "processImages", data: workerData })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        delete imageTabPromises[imageTabId];
+                        reject(new Error(`Failed to send message to image tab: ${err.message}`));
+                    });
+            });
+
+            console.log(`${chapterLogPrefix} Image tab result:`, imageTabResult);
+
+            if (imageTabResult.status === 'success') {
+                const finalMessage = imageTabResult.failedImages > 0 ? `Downloaded (${imageTabResult.failedImages} img failed)` : "Downloaded";
+                sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status: "complete", message: finalMessage });
+                return { status: 'success', chapterName: sanitizedChapterNamePart, failedImages: imageTabResult.failedImages };
+            } else {
+                throw new Error(imageTabResult.error || 'Image tab processing failed');
+            }
+
+        } catch (imageProcessError) {
+            console.error(`${chapterLogPrefix} Image processing failed:`, imageProcessError);
+            sendPopupMessage("updateChapterStatus", {
+                ...chapterDataForUi,
+                status: "failed",
+                message: `Error: ${imageProcessError.message.substring(0, 50)}...`
+            });
+            return { status: 'failed', chapterName: sanitizedChapterNamePart, error: imageProcessError.message };
+
+        } finally {
+            // Wait for download to start before closing tab
+            await sleep(2000);
+
+            if (imageTabId) {
+                try {
+                    await chrome.tabs.remove(imageTabId);
+                    console.log(`${chapterLogPrefix} Closed image tab ${imageTabId}.`);
+                } catch (removeError) {
+                    if (removeError.message && !removeError.message.includes("No tab with id")) {
+                        console.warn(`${chapterLogPrefix} Could not remove image tab: ${removeError.message}`);
+                    }
+                }
+                currentDownloadState.activeTabIds.delete(imageTabId);
+                delete imageTabPromises[imageTabId];
+            }
+            await sleep(DELAY_AFTER_TASK_FINISH_MS);
         }
 
     } catch (error) {
@@ -479,29 +498,6 @@ async function processSingleChapter(chapter, chapterIndex, totalChapters, series
             message: `Error: ${error.message.substring(0, 50)}...`
         });
         return { status: 'failed', chapterName: sanitizedChapterNamePart, error: error.message };
-
-    } finally {
-        // 6. Close the tab (Identical to original)
-        if (chapterTabId) {
-            try {
-                 await chrome.tabs.remove(chapterTabId);
-                 console.log(`${chapterLogPrefix} Closed tab ${chapterTabId}.`);
-            } catch (removeError) {
-                 if (removeError.message && !removeError.message.includes("No tab with id")) {
-                     console.warn(`${chapterLogPrefix} Could not remove tab ${chapterTabId}: ${removeError.message}`);
-                 }
-            }
-             currentDownloadState.activeTabIds.delete(chapterTabId);
-             delete chapterScraperPromises[chapterTabId];
-        }
-        // --- EXPLICIT CLEANUP ---
-        // Release references to potentially large objects for this chapter
-        chapterZip = null;
-        imageUrls = null;
-        validImageUrls = null;
-        console.log(`${chapterLogPrefix} processSingleChapter cleanup executed.`);
-        // --- END EXPLICIT CLEANUP ---
-        await sleep(DELAY_AFTER_TASK_FINISH_MS);
     }
 }
 
@@ -690,7 +686,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             reject(new Error(errorMsg));
             delete chapterScraperPromises[tabId];
         } else {
-            console.warn(`[Msg Listener] Received scraperError for unknown/closed Tab ${tabId}.`, message);
+            console.warn(`[Msg Listener] Received scraperError for unknown/closed Tab ${tabId}:`, message);
+        }
+        messageHandled = true;
+
+    } else if (message.action === "imageTabDone") {
+        const tabId = sender.tab?.id;
+        if (tabId && imageTabPromises[tabId]) {
+            const { resolve, timeoutId } = imageTabPromises[tabId];
+            clearTimeout(timeoutId);
+            console.log(`[Msg Listener] Received imageTabDone from Tab ${tabId}:`, message.payload);
+            resolve(message.payload);
+            delete imageTabPromises[tabId];
+        } else {
+            console.warn(`[Msg Listener] Received imageTabDone for unknown Tab ${tabId}:`, message);
         }
         messageHandled = true;
     }

@@ -13,7 +13,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "*://*.webtoonscan.com/*"
+    "*://*.webtoonscan.com/*",
+    "*://cdn4.webtoonscan.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -32,7 +33,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["jszip.min.js"], 
+      "resources": ["jszip.min.js", "imageTabWorker.js"], 
       "matches": ["<all_urls>"] 
     }
   ]
