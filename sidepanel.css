@@ -367,4 +367,75 @@ input[type="number"]:focus {
     background-color: #4CAF50;
 }
 
+/* Report Section */
+.report-footer {
+    padding-top: var(--spacing-sm);
+    margin-top: auto;
+}
+
+.report-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.report-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: var(--transition);
+    padding: 10px 16px;
+    background: linear-gradient(135deg, rgba(107, 70, 255, 0.2), rgba(107, 70, 255, 0.1));
+    border: 1px solid rgba(107, 70, 255, 0.4);
+    border-radius: var(--border-radius);
+}
+
+.report-link:hover {
+    background: linear-gradient(135deg, var(--accent-color), rgba(107, 70, 255, 0.8));
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 8px rgba(107, 70, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.report-link i {
+    font-size: 12px;
+}
+
+.current-url-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: help;
+    transition: var(--transition);
+}
+
+.current-url-display.has-url {
+    background-color: rgba(76, 175, 80, 0.08);
+    border-color: rgba(76, 175, 80, 0.2);
+    color: rgba(76, 175, 80, 0.8);
+}
+
+.current-url-display i {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.current-url-display span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
 /* ... (keep MutationObserver styles for #progressBar) ... */

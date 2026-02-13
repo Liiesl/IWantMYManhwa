@@ -483,6 +483,76 @@ document.getElementById('helpBtn').addEventListener('click', () => {
     window.open(chrome.runtime.getURL('docs/wiki.html'), '_blank');
 });
 
+// Update report link with dynamic content
+async function updateReportLink() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const manifest = chrome.runtime.getManifest();
+        const version = manifest.version || 'unknown';
+        
+        let currentUrl = 'Not available';
+        if (tab?.url) {
+            currentUrl = tab.url;
+            // Update URL display
+            const urlText = document.getElementById('currentUrlText');
+            const urlDisplay = document.getElementById('currentUrlDisplay');
+            if (urlText && urlDisplay) {
+                // Truncate long URLs for display
+                const displayUrl = currentUrl.length > 50 
+                    ? currentUrl.substring(0, 50) + '...' 
+                    : currentUrl;
+                urlText.textContent = displayUrl;
+                urlDisplay.title = currentUrl;
+                urlDisplay.classList.add('has-url');
+            }
+        }
+        
+        // Build the GitHub issue template
+        const title = encodeURIComponent('Broken Site Report');
+        const body = encodeURIComponent(
+            `## Issue Report
+
+### Website URL (Current Page)
+${currentUrl !== 'Not available' ? currentUrl : '_(URL will be filled automatically)_'}
+
+### Manhwa Title (TYPE HERE)
+<!-- Example: Solo Leveling -->
+**[TYPE MANHWA TITLE]**
+
+### Chapter Number (TYPE HERE)
+<!-- Example: 42 -->
+**[TYPE CHAPTER NUMBER]**
+
+### What went wrong?
+<!-- Describe what happened vs what you expected -->
+
+### Steps to reproduce
+1. Go to the URL above
+2. Click 'Scan'
+3. ...
+
+### Extension Version
+${version}
+
+### Browser
+<!-- e.g., Chrome 120, Edge 118, etc. -->
+
+### Additional context
+<!-- Screenshots, error messages, or any other details that might help -->`
+        );
+        
+        const reportLink = document.getElementById('reportBrokenLink');
+        if (reportLink) {
+            reportLink.href = `https://github.com/Liiesl/IWantMYManhwa/issues/new?title=${title}&body=${body}`;
+        }
+    } catch (error) {
+        console.error('Error updating report link:', error);
+        const urlText = document.getElementById('currentUrlText');
+        if (urlText) urlText.textContent = 'URL unavailable';
+    }
+}
+
 // Initialize on load
 initializePanel();
+updateReportLink();
 // --- END OF FILE sidepanel.js ---
