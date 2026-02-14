@@ -4,141 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manhwa Downloader Documentation</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0a;
-            color: rgba(255, 255, 255, 0.9);
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        h1 {
-            color: #6b46ff;
-            font-size: 32px;
-            margin-bottom: 20px;
-        }
-
-        h2 {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 24px;
-            margin-top: 40px;
-            margin-bottom: 16px;
-        }
-
-        h3 {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 18px;
-            margin-top: 24px;
-            margin-bottom: 12px;
-        }
-
-        p {
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 16px;
-        }
-
-        code {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Consolas', monospace;
-            color: #6b46ff;
-        }
-
-        pre {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 16px;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin-bottom: 16px;
-        }
-
-        ul, ol {
-            margin-left: 24px;
-            margin-bottom: 16px;
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        li {
-            margin-bottom: 8px;
-        }
-
-        .section {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .tip {
-            background: rgba(107, 70, 255, 0.1);
-            border-left: 4px solid #6b46ff;
-            padding: 16px;
-            border-radius: 0 8px 8px 0;
-            margin-bottom: 16px;
-        }
-
-        .tip-title {
-            font-weight: 600;
-            color: #6b46ff;
-            margin-bottom: 8px;
-        }
-    </style>
+    <link rel="stylesheet" href="wiki.css">
+    <link rel="stylesheet" href="highlight.css">
+    <script src="marked.min.js"></script>
+    <script src="highlight.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Manhwa Downloader Documentation</h1>
-        
-        <div class="section">
-            <h2>Getting Started</h2>
-            <p>Welcome to the Manhwa Downloader documentation. This guide will help you understand how to use the extension effectively.</p>
-            
-            <h3>Quick Start</h3>
-            <ol>
-                <li>Navigate to your favorite manhwa/manhua website</li>
-                <li>Click the "Scan" button in the extension panel</li>
-                <li>Select the chapters you want to download</li>
-                <li>Click "Download" to start</li>
-            </ol>
-        </div>
-
-        <div class="section">
-            <h2>Features</h2>
-            <ul>
-                <li><strong>Chapter Scanning</strong> - Automatically detects available chapters</li>
-                <li><strong>Range Selection</strong> - Download specific chapter ranges</li>
-                <li><strong>Progress Tracking</strong> - Monitor download progress in real-time</li>
-                <li><strong>Pause/Resume</strong> - Control downloads with pause and stop buttons</li>
-            </ul>
-        </div>
-
-        <div class="section">
-            <h2>Troubleshooting</h2>
-            <p>Common issues and solutions:</p>
-            
-            <div class="tip">
-                <div class="tip-title">Tip</div>
-                <p>Make sure you're on a supported website before scanning.</p>
+    <div class="docs-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1 class="logo">Manhwa Downloader</h1>
+                <span class="version">Docs</span>
             </div>
-        </div>
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Navigation will be loaded dynamically -->
+            </nav>
+        </aside>
 
-        <div class="section">
-            <h2>Supported Sites</h2>
-            <p>This extension works with various manhwa and manhua sites. If you encounter issues with a specific site, please report it.</p>
-        </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-wrapper">
+                <div class="breadcrumbs" id="breadcrumbs"></div>
+                <article class="markdown-content" id="content">
+                    <!-- Markdown content will be loaded here -->
+                </article>
+            </div>
+        </main>
     </div>
+
+    <script src="wiki.js"></script>
 </body>
 </html>
