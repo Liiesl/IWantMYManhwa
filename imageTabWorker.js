@@ -35,24 +35,37 @@ function padNumber(num, length = 3) {
 
 function extractChapterNumber(name, index) {
     if (!name) return index + 1;
+    
+    // First, clean the name by removing dates to avoid false positives
+    // Remove month names and 4-digit years which might be part of date strings
+    const cleanedName = name
+        .replace(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi, ' ')
+        .replace(/\b\d{4}\b/g, ' ')
+        .trim();
+    
     const patterns = [
         /Chapter\s*([\d\.]+)/i,
         /Ch\.?\s*([\d\.]+)/i,
         /(?:^|\s|\W)([\d\.]+)(?:$|\s|\W,:|-)/
     ];
+    
     for (const pattern of patterns) {
-        const match = name.match(pattern);
+        const match = cleanedName.match(pattern);
         if (match && match[1]) {
             const numStr = match[1];
-            if (!isNaN(parseFloat(numStr))) {
+            // Validate that it's a pure numeric chapter number (no letters)
+            if (/^[\d\.]+$/.test(numStr) && !isNaN(parseFloat(numStr))) {
                 return numStr;
             }
         }
     }
-    const digits = name.match(/\d+/g);
+    
+    // Fallback: extract first pure number sequence (avoiding dates with letters)
+    const digits = cleanedName.match(/\b\d+(?:\.\d+)?\b/);
     if (digits) {
         return digits[0];
     }
+    
     return index + 1;
 }
 

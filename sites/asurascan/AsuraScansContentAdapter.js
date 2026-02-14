@@ -143,6 +143,47 @@ class AsuraScansContentAdapter extends SiteAdapter {
             return a.name.localeCompare(b.name);
         });
     }
+
+    /**
+     * Extract and clean chapter name from link text
+     * For Asura, this extracts just the chapter number, removing dates
+     * @param {string} text - Raw link text
+     * @returns {string} - Cleaned chapter name (just the number)
+     */
+    cleanChapterName(text) {
+        if (!text) return 'Unknown Chapter';
+        
+        const trimmed = text.trim();
+        
+        // Try to extract chapter number from patterns like:
+        // "Chapter 122", "Ch. 122", "122", "122 Feb 2026", "122feb 2026"
+        const patterns = [
+            /^chapter\s+(\d+(?:\.\d+)?)/i,
+            /^ch\.?\s*(\d+(?:\.\d+)?)/i,
+            /^(\d+(?:\.\d+)?)/
+        ];
+        
+        for (const pattern of patterns) {
+            const match = trimmed.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+        
+        // Fallback: remove common date/month patterns and extract first number
+        const cleaned = trimmed
+            .replace(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi, '')
+            .replace(/\b\d{4}\b/g, '')  // Remove 4-digit years
+            .trim();
+        
+        const numberMatch = cleaned.match(/^(\d+(?:\.\d+)?)/);
+        if (numberMatch) {
+            return numberMatch[1];
+        }
+        
+        // If all else fails, return the original text cleaned of "Chapter" prefix
+        return trimmed.replace(/^chapter\s+/i, '').replace(/^ch\.?\s*/i, '').trim();
+    }
 }
 
 if (typeof window !== 'undefined') window.AsuraScansContentAdapter = AsuraScansContentAdapter;
