@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { minify } = require('terser');
 
 // Configuration
 const ADAPTER_DIR = './sites';
@@ -95,7 +96,7 @@ const CONTENT_ADAPTER_FILES = [
 const REGISTRY_FILE = 'SiteRegistry.js';
 const BASE_ADAPTER_FILE = 'SiteAdapter.js';
 
-function build() {
+async function build() {
     console.log('Building content.js from ContentAdapter files...\n');
     
     let adapterCode = '';
@@ -181,13 +182,42 @@ function build() {
     let output = TEMPLATE.replace('{{ADAPTER_CODE}}', adapterCode.trim());
     output = output.replace('{{REGISTRY_CODE}}', registryCode.trim());
     
+    // Store original size for comparison
+    const originalSize = Buffer.byteLength(output, 'utf8');
+    
+    // Minify the output
+    console.log('\n  → Minifying with Terser...');
+    const minified = await minify(output, {
+        compress: {
+            drop_console: false,  // Keep console.logs for debugging
+            drop_debugger: true,
+            passes: 2
+        },
+        mangle: {
+            reserved: ['SiteAdapter', 'SiteRegistry']  // Keep class names
+        },
+        format: {
+            comments: /^!/  // Keep license comments
+        }
+    });
+    
+    if (minified.error) {
+        console.error('Minification error:', minified.error);
+        process.exit(1);
+    }
+    
     // Write output file
-    fs.writeFileSync(OUTPUT_FILE, output, 'utf8');
+    fs.writeFileSync(OUTPUT_FILE, minified.code, 'utf8');
     
     const stats = fs.statSync(OUTPUT_FILE);
+    const minifiedSize = stats.size;
+    const savings = originalSize - minifiedSize;
+    const savingsPercent = ((savings / originalSize) * 100).toFixed(1);
+    
     console.log(`\n✓ Built: ${OUTPUT_FILE}`);
-    console.log(`  Size: ${(stats.size / 1024).toFixed(2)} KB`);
-    console.log(`  Lines: ${output.split('\n').length}`);
+    console.log(`  Original: ${(originalSize / 1024).toFixed(2)} KB`);
+    console.log(`  Minified: ${(minifiedSize / 1024).toFixed(2)} KB`);
+    console.log(`  Savings:  ${(savings / 1024).toFixed(2)} KB (${savingsPercent}%)`);
     console.log(`\nDone! Load the extension in Chrome.\n`);
 }
 
@@ -202,14 +232,15 @@ if (process.argv.includes('--watch')) {
         if (fs.existsSync(filePath)) {
             fs.watchFile(filePath, () => {
                 console.log(`\n${file} changed, rebuilding...`);
-                try {
-                    build();
-                } catch (e) {
+                build().catch(e => {
                     console.error('Build failed:', e.message);
-                }
+                });
             });
         }
     });
 } else {
-    build();
+    build().catch(e => {
+        console.error('Build failed:', e.message);
+        process.exit(1);
+    });
 }

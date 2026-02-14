@@ -7,6 +7,8 @@
     "doc": "docs"
   },
   "scripts": {
+    "build": "node build.js",
+    "build:watch": "node build.js --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -20,5 +22,8 @@
   "bugs": {
     "url": "https://github.com/Liiesl/IWantMYManhwa/issues"
   },
-  "homepage": "https://github.com/Liiesl/IWantMYManhwa#readme"
+  "homepage": "https://github.com/Liiesl/IWantMYManhwa#readme",
+  "devDependencies": {
+    "terser": "^5.46.0"
+  }
 }
