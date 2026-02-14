@@ -526,6 +526,14 @@ recheckBtn.addEventListener('click', async () => {
     icon.classList.remove('fa-spin');
 });
 
+// Help button in unsupported site container
+const unsupportedHelpBtn = document.getElementById('unsupportedHelpBtn');
+if (unsupportedHelpBtn) {
+    unsupportedHelpBtn.addEventListener('click', () => {
+        window.open(chrome.runtime.getURL('docs/wiki.html'), '_blank');
+    });
+}
+
 // Update request site link for unsupported sites
 async function updateRequestSiteLink() {
     try {

@@ -421,6 +421,14 @@ input[type="number"]:focus {
     transform: translateY(-1px);
 }
 
+/* Help button in unsupported site container */
+.unsupported-content .help-button {
+    margin-top: var(--spacing-sm);
+    min-width: 140px;
+    background-color: rgba(107, 70, 255, 0.2);
+    border: 1px solid rgba(107, 70, 255, 0.4);
+}
+
 /* Main Content (for toggling visibility) */
 .main-content {
     display: flex;
