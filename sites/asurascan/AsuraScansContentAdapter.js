@@ -130,14 +130,14 @@ class AsuraScansContentAdapter extends SiteAdapter {
             const numB = this.extractChapterNumberFromUrl(b.url);
 
             if (numA !== null && numB !== null) {
-                return numB - numA; // Descending (newest first)
+                return numA - numB; // Ascending (oldest first)
             }
 
             const nameNumA = parseFloat(a.name.match(/^[\d\.]+/)?.[0]);
             const nameNumB = parseFloat(b.name.match(/^[\d\.]+/)?.[0]);
 
             if (!isNaN(nameNumA) && !isNaN(nameNumB)) {
-                return nameNumB - nameNumA;
+                return nameNumA - nameNumB;
             }
 
             return a.name.localeCompare(b.name);
