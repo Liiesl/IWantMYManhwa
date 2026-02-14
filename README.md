@@ -38,6 +38,7 @@ Compatibility with websites can change over time due to updates on their end. We
 <summary><strong>Currently Supported (Click to expand)</strong></summary>
 
 * `[Webtoonscan | https://webtoonscan.com]`
+* `[AsuraScans | https://asuracomic.net]`
 </details>
 
 <details>

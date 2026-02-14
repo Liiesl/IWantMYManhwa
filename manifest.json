@@ -14,14 +14,16 @@
   ],
   "host_permissions": [
     "*://*.webtoonscan.com/*",
-    "*://cdn4.webtoonscan.com/*"
+    "*://cdn4.webtoonscan.com/*",
+    "*://*.asuracomic.net/*",
+    "*://*.beta.asuracomic.net/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.webtoonscan.com/manhwa/*"],
+      "matches": ["*://*.webtoonscan.com/manhwa/*", "*://*.asuracomic.net/series/*", "*://*.beta.asuracomic.net/series/*"],
       "js": ["content.js"]
     }
   ],

@@ -117,6 +117,11 @@ class SiteRegistry {
             this.register('webtoonscan', new WebtoonscanAdapter(), true);
         }
 
+        // Register AsuraScans adapter
+        if (typeof AsuraScansAdapter !== 'undefined') {
+            this.register('asurascan', new AsuraScansAdapter());
+        }
+
         console.log('[SiteRegistry] Initialized with adapters:', this.getRegisteredSites());
     }
 }
