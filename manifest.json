@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IWantMYManhwa",
-  "version": "1.4",
+  "version": "1.4.2",
   "description": "Downloads manhwa chapters in bulk from multiple sites as ZIP files via the side panel.",
   "permissions": [
     "sidePanel",
