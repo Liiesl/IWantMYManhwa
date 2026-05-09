@@ -96,6 +96,93 @@ const CONTENT_ADAPTER_FILES = [
 const REGISTRY_FILE = 'SiteRegistry.js';
 const BASE_ADAPTER_FILE = 'SiteAdapter.js';
 
+function extractAdapterInfo(filePath) {
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    const domains = [];
+    const domainsMatch = content.match(/domains:\s*\[([^\]]*)\]/);
+    if (domainsMatch) {
+        const quotedStrings = domainsMatch[1].match(/'([^']+)'/g);
+        if (quotedStrings) {
+            for (const s of quotedStrings) {
+                domains.push(s.replace(/'/g, ''));
+            }
+        }
+    }
+
+    let urlPattern = '';
+    const listingMatch = content.match(/isChapterListingPage\([^)]*\)\s*\{([^}]+)\}/);
+    if (listingMatch) {
+        const body = listingMatch[1];
+        const urlCalls = body.match(/url\.includes\(['"]([^'"]+)['"]\)/g);
+        if (urlCalls) {
+            for (const call of urlCalls) {
+                const valMatch = call.match(/['"]([^'"]+)['"]/);
+                if (valMatch) {
+                    const val = valMatch[1];
+                    if (val.startsWith('/')) {
+                        urlPattern = val;
+                        break;
+                    }
+                }
+            }
+            if (!urlPattern) {
+                for (const call of urlCalls) {
+                    const valMatch = call.match(/['"]([^'"]+)['"]/);
+                    if (valMatch) {
+                        const pathMatch = valMatch[1].match(/\.com(\/.*)/);
+                        if (pathMatch) {
+                            urlPattern = pathMatch[1];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return { domains, urlPattern };
+}
+
+function updateManifest() {
+    const manifestPath = './manifest.json';
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+    const hostPermissions = new Set();
+    const contentMatches = new Set();
+
+    for (const file of CONTENT_ADAPTER_FILES) {
+        const filePath = path.join(ADAPTER_DIR, file);
+        if (!fs.existsSync(filePath)) continue;
+
+        const info = extractAdapterInfo(filePath);
+
+        for (const domain of info.domains) {
+            const hasSubdomain = domain.split('.').length > 2;
+            if (hasSubdomain) {
+                hostPermissions.add(`*://${domain}/*`);
+            } else {
+                hostPermissions.add(`*://*.${domain}/*`);
+            }
+        }
+
+        const nonCdnDomains = info.domains.filter(d => !d.includes('cdn'));
+        if (nonCdnDomains.length > 0 && info.urlPattern) {
+            for (const domain of nonCdnDomains) {
+                contentMatches.add(`*://*.${domain}${info.urlPattern}*`);
+            }
+        }
+    }
+
+    manifest.host_permissions = [...hostPermissions].sort();
+    if (manifest.content_scripts && manifest.content_scripts.length > 0) {
+        manifest.content_scripts[0].matches = [...contentMatches].sort();
+    }
+
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+    console.log('  ✓ Updated manifest.json');
+}
+
 async function build() {
     console.log('Building content.js from ContentAdapter files...\n');
     
@@ -218,6 +305,9 @@ async function build() {
     console.log(`  Original: ${(originalSize / 1024).toFixed(2)} KB`);
     console.log(`  Minified: ${(minifiedSize / 1024).toFixed(2)} KB`);
     console.log(`  Savings:  ${(savings / 1024).toFixed(2)} KB (${savingsPercent}%)`);
+
+    updateManifest();
+
     console.log(`\nDone! Load the extension in Chrome.\n`);
 }
 
