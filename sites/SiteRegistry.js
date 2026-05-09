@@ -122,6 +122,11 @@ class SiteRegistry {
             this.register('asurascan', new AsuraScansAdapter());
         }
 
+        // Register Arenascan adapter
+        if (typeof ArenascanAdapter !== 'undefined') {
+            this.register('arenascan', new ArenascanAdapter());
+        }
+
         console.log('[SiteRegistry] Initialized with adapters:', this.getRegisteredSites());
     }
 }

@@ -89,7 +89,8 @@ console.log("[Content Script] Ready");
 // Files to include (ContentAdapter files only - scraping only)
 const CONTENT_ADAPTER_FILES = [
     'webtoonscan/WebtoonscanContentAdapter.js',
-    'asurascan/AsuraScansContentAdapter.js'
+    'asurascan/AsuraScansContentAdapter.js',
+    'arenascan/ArenascanContentAdapter.js'
 ];
 
 // Registry file

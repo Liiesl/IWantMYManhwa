@@ -24,6 +24,8 @@ try {
         'sites/webtoonscan/WebtoonscanAdapter.js',
         'sites/asurascan/AsuraScansContentAdapter.js',
         'sites/asurascan/AsuraScansAdapter.js',
+        'sites/arenascan/ArenascanContentAdapter.js',
+        'sites/arenascan/ArenascanAdapter.js',
         'sites/SiteRegistry.js'
     );
     console.log("Site adapters loaded successfully.");

@@ -13,8 +13,10 @@
     "alarms"
   ],
   "host_permissions": [
+    "*://*.arenascan.com/*",
     "*://*.asurascans.com/*",
     "*://*.webtoonscan.com/*",
+    "*://cdn.arenascan.com/*",
     "*://cdn4.webtoonscan.com/*"
   ],
   "background": {
@@ -23,6 +25,7 @@
   "content_scripts": [
     {
       "matches": [
+        "*://*.arenascan.com/manga/*",
         "*://*.asurascans.com/comics/*",
         "*://*.webtoonscan.com/manhwa/*"
       ],
