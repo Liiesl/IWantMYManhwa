@@ -57,7 +57,9 @@ class AsuraScansContentAdapter extends SiteAdapter {
     isValidChapterLink(link, url) {
         if (!url || !url.includes('/chapter/')) return false;
         const text = link.textContent?.trim();
-        return text && text.length > 0;
+        if (!text || text.length === 0) return false;
+        if (/^(First|Latest)\s+Chapter/i.test(text)) return false;
+        return true;
     }
 
     extractChapterNumberFromUrl(url) {
