@@ -213,7 +213,7 @@ scanChaptersBtn.addEventListener('click', async () => {
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.url && (tab.url.includes("webtoonscan.com/manhwa/") || tab.url.includes("asuracomic.net/series/"))) {
+        if (tab?.url && typeof siteRegistry !== 'undefined' && siteRegistry.isSupported(tab.url)) {
             // Inject content script dynamically to ensure it's loaded
             console.log('Injecting content script...');
             try {

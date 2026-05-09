@@ -36,17 +36,13 @@ class WebtoonscanAdapter extends WebtoonscanContentAdapter {
             activeTabIds.add(chapterTabId);
             console.log(`${chapterLogPrefix} Created chapter tab ID: ${chapterTabId}`);
 
-            // 2. Wait for tab to load
-            await this.waitForTabLoad(chapterTabId, config.tabLoadTimeoutMs);
-
-            // 3. Get image URLs using parent's getChapterImages logic
-            const imageUrls = await this.scrapeImagesFromTab(chapterTabId, config);
-
-            if (!Array.isArray(imageUrls)) {
-                throw new Error("Failed to get image URLs.");
-            }
-
-            validImageUrls = imageUrls.filter(url => url && typeof url === 'string' && url.startsWith('http'));
+            // 2. Scrape image URLs as soon as DOM is ready (no waiting for full page load)
+            validImageUrls = await this.scrapeImageUrlsQuick(
+                chapterTabId,
+                ['div.reading-content div.page-break img.wp-manga-chapter-img', 'div.read-container img.viewer-image'],
+                null,
+                config.tabLoadTimeoutMs
+            );
             console.log(`${chapterLogPrefix} Found ${validImageUrls.length} valid image URLs.`);
 
             if (validImageUrls.length === 0) {
@@ -81,8 +77,8 @@ class WebtoonscanAdapter extends WebtoonscanContentAdapter {
             activeTabIds.add(imageTabId);
             console.log(`${chapterLogPrefix} Created image tab ID: ${imageTabId}`);
 
-            if (updateStatus) updateStatus('loading', 'Waiting for image tab...');
-            await this.waitForTabLoad(imageTabId, config.tabLoadTimeoutMs);
+            if (updateStatus) updateStatus('loading', 'Preparing image tab...');
+            await this.waitForTabReady(imageTabId, config.tabLoadTimeoutMs);
 
             // 5. Inject jszip and imageTabWorker
             await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });

@@ -29,15 +29,12 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
             activeTabIds.add(chapterTabId);
             console.log(`${chapterLogPrefix} Created chapter tab ID: ${chapterTabId}`);
 
-            await this.waitForTabLoad(chapterTabId, config.tabLoadTimeoutMs);
-
-            const imageUrls = await this.scrapeImagesFromTab(chapterTabId, config);
-
-            if (!Array.isArray(imageUrls)) {
-                throw new Error("Failed to get image URLs.");
-            }
-
-            validImageUrls = imageUrls.filter(url => url && typeof url === 'string' && url.startsWith('http'));
+            validImageUrls = await this.scrapeImageUrlsQuick(
+                chapterTabId,
+                this.getImageSelectors(),
+                'EndDesign',
+                config.tabLoadTimeoutMs
+            );
             console.log(`${chapterLogPrefix} Found ${validImageUrls.length} valid image URLs.`);
 
             if (validImageUrls.length === 0) {
@@ -71,8 +68,8 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
             activeTabIds.add(imageTabId);
             console.log(`${chapterLogPrefix} Created image tab ID: ${imageTabId}`);
 
-            if (updateStatus) updateStatus('loading', 'Waiting for image tab...');
-            await this.waitForTabLoad(imageTabId, config.tabLoadTimeoutMs);
+            if (updateStatus) updateStatus('loading', 'Preparing image tab...');
+            await this.waitForTabReady(imageTabId, config.tabLoadTimeoutMs);
 
             await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
             await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
@@ -128,14 +125,11 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
     }
 
     async scrapeImagesFromTab(tabId, config) {
+        const selectors = this.getImageSelectors();
         const results = await chrome.scripting.executeScript({
             target: { tabId },
-            func: () => {
-                const selectors = [
-                    'div.py-8 img.object-cover',
-                    'div.py-8 img'
-                ];
-                for (const selector of selectors) {
+            func: (selectorList) => {
+                for (const selector of selectorList) {
                     const images = document.querySelectorAll(selector);
                     if (images.length > 0) {
                         const urls = [];
@@ -149,7 +143,8 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
                     }
                 }
                 return [];
-            }
+            },
+            args: [selectors]
         });
         
         return results[0]?.result || [];

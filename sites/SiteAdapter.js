@@ -227,6 +227,76 @@ class SiteAdapter {
     async downloadChapter(chapterData, seriesTitle, updateStatus, options = {}) {
         throw new Error('downloadChapter() must be implemented by subclass');
     }
+
+    /**
+     * Wait for tab to reach document_idle state (DOM ready, before images/ads finish loading)
+     * Uses executeScript polling — much faster than waiting for status === 'complete'
+     * @param {number} tabId - Tab ID to wait for
+     * @param {number} timeoutMs - Max wait time in ms
+     */
+    async waitForTabReady(tabId, timeoutMs = 60000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeoutMs) {
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId },
+                    func: () => true
+                });
+                return;
+            } catch (e) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+        throw new Error(`Timeout waiting for tab ready (${Math.round(timeoutMs / 1000)}s)`);
+    }
+
+    /**
+     * Scrape image URLs from tab as soon as DOM is ready — no waiting for full page load.
+     * Retries until image elements with data-src/src are found or timeout.
+     * @param {number} tabId - Tab ID
+     * @param {string[]} selectors - CSS selectors for image elements
+     * @param {string|null} excludePattern - Substring to exclude from URLs (e.g. 'EndDesign')
+     * @param {number} timeoutMs - Max retry time in ms
+     * @returns {Promise<string[]>} Filtered image URLs
+     */
+    async scrapeImageUrlsQuick(tabId, selectors, excludePattern = null, timeoutMs = 30000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeoutMs) {
+            try {
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId },
+                    func: (selectorList, excluded) => {
+                        const urls = [];
+                        for (const selector of selectorList) {
+                            const images = document.querySelectorAll(selector);
+                            for (const img of images) {
+                                let url = img.dataset?.src || img.dataset?.lazySrc ||
+                                    img.getAttribute('data-src') ||
+                                    img.getAttribute('data-lazy-src') ||
+                                    img.src;
+                                if (url && typeof url === 'string' && url.startsWith('http')) {
+                                    url = url.trim();
+                                    if (excluded && url.includes(excluded)) continue;
+                                    urls.push(url);
+                                }
+                            }
+                            if (urls.length > 0) return { success: true, urls };
+                        }
+                        return { success: false };
+                    },
+                    args: [selectors, excludePattern]
+                });
+                const result = results[0]?.result;
+                if (result?.success && result.urls?.length > 0) {
+                    return result.urls;
+                }
+                await new Promise(r => setTimeout(r, 500));
+            } catch (e) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+        throw new Error(`Timeout scraping images from tab (${Math.round(timeoutMs / 1000)}s)`);
+    }
 }
 
 // Make available globally for use in other scripts
