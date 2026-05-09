@@ -22,6 +22,12 @@ This extension works with various manhwa and manhua sites. Below is the current 
 - **Status**: Fully supported
 - **Pattern**: `/series/[series-name]/`
 
+### ArenaScans
+- **Domain**: arenascan.com
+- **Content**: Manhwa, Manhua, Manga
+- **Status**: Fully supported
+- **Pattern**: `/manga/[series-name]/`
+
 ## Requesting New Sites
 
 If your favorite site isn't supported:
@@ -36,6 +42,7 @@ If your favorite site isn't supported:
 |------|--------|-------|
 | WebtoonScan | Working | Primary testing site |
 | Asura Scans | Working | Both main and beta |
+| ArenaScans | Working | CDN-based image delivery |
 
 ## Technical Details
 

@@ -39,6 +39,7 @@ Compatibility with websites can change over time due to updates on their end. We
 
 * `[Webtoonscan | https://webtoonscan.com]`
 * `[AsuraScans | https://asuracomic.net]`
+* `[Arenascans | https://arenascan.com]`
 </details>
 
 <details>

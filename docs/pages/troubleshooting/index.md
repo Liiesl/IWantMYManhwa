@@ -14,6 +14,7 @@ Common issues and solutions for the Manhwa Downloader extension.
 Make sure you're on a supported website. The extension works with:
 - webtoonscan.com
 - asuracomic.net
+- arenascan.com
 
 If you see this message on a supported site, try clicking **Re-check**.
 

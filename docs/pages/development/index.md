@@ -22,6 +22,9 @@ sites/
 ├── webtoonscan/
 │   ├── WebtoonscanAdapter.js         # Full adapter (scraping + download)
 │   └── WebtoonscanContentAdapter.js  # Scraping only - for content.js
+├── arenascan/
+│   ├── ArenascanAdapter.js           # Full adapter (scraping + download)
+│   └── ArenascanContentAdapter.js    # Scraping only - for content.js
 └── ... (other sites)
 
 content.js           # GENERATED FILE (don't edit directly)

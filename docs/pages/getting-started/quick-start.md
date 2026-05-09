@@ -13,6 +13,7 @@ This guide will get you downloading chapters in under 2 minutes.
 Go to any supported manhwa site and open a series page. For example:
 - `https://webtoonscan.com/manhwa/solo-leveling`
 - `https://asuracomic.net/series/solo-leveling`
+- `https://arenascan.com/manga/solo-leveling`
 
 ## Step 2: Open the Extension
 
