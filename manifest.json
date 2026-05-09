@@ -13,25 +13,29 @@
     "alarms"
   ],
   "host_permissions": [
+    "*://*.asurascans.com/*",
     "*://*.webtoonscan.com/*",
-    "*://cdn4.webtoonscan.com/*",
-    "*://*.asuracomic.net/*",
-    "*://*.beta.asuracomic.net/*"
+    "*://cdn4.webtoonscan.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.webtoonscan.com/manhwa/*", "*://*.asuracomic.net/series/*", "*://*.beta.asuracomic.net/series/*"],
-      "js": ["content.js"]
+      "matches": [
+        "*://*.asurascans.com/comics/*",
+        "*://*.webtoonscan.com/manhwa/*"
+      ],
+      "js": [
+        "content.js"
+      ]
     }
   ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },
   "icons": {
-    "48": "icons/icon48.png" 
+    "48": "icons/icon48.png"
   },
   "action": {
     "default_title": "Open Side Panel"
@@ -44,7 +48,9 @@
         "docs/*",
         "sites/*.js"
       ],
-      "matches": ["<all_urls>"] 
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

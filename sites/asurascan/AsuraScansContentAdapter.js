@@ -4,34 +4,34 @@ class AsuraScansContentAdapter extends SiteAdapter {
     constructor(siteConfig = {}) {
         super({
             name: 'AsuraScans',
-            domains: ['asuracomic.net', 'beta.asuracomic.net'],
+            domains: ['asurascans.com'],
             ...siteConfig
         });
     }
 
     isChapterListingPage(url) {
         if (!url) return false;
-        return url.includes('/series/') && !this.isChapterUrl(url);
+        return url.includes('/comics/') && !this.isChapterUrl(url);
     }
 
     getChapterListSelectors() {
         return [
-            'div[class*="space-y-"] a[href*="/chapter/"]',
-            'div.max-h-\\[20rem\\] a[href*="/chapter/"]'
+            'a[href*="/comics/"][href*="/chapter/"]',
+            '[class*="divide-white"] a[href*="/chapter/"]'
         ];
     }
 
     getTitleSelectors() {
         return [
-            'span.text-xl.font-bold',
-            'h1.text-xl.font-bold'
+            'article h1',
+            'h1.text-xl'
         ];
     }
 
     getImageSelectors() {
         return [
-            'div.py-8 img.object-cover',
-            'div.py-8 img'
+            'img[data-page-index]',
+            'img[src*="cdn.asurascans.com"]'
         ];
     }
 
@@ -42,11 +42,11 @@ class AsuraScansContentAdapter extends SiteAdapter {
             const urlObj = new URL(url);
             const pathSegments = urlObj.pathname.split('/').filter(s => s.length > 0);
             
-            // Pattern: /series/{slug}/chapter/{number}
+            // Pattern: /comics/{slug}/chapter/{number}
             const chapterIndex = pathSegments.indexOf('chapter');
             if (chapterIndex !== -1 && chapterIndex + 1 < pathSegments.length) {
                 const chapterNum = pathSegments[chapterIndex + 1];
-                return /^\d+$/.test(chapterNum) && url.includes('asuracomic.net');
+                return /^\d+$/.test(chapterNum) && url.includes('asurascans.com');
             }
         } catch (e) {
             return false;
