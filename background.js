@@ -41,7 +41,7 @@ try {
 // --- Configuration ---
 const MAX_CONCURRENT_TABS = 3; // Max parallel chapter processing tabs
 const TAB_LOAD_TIMEOUT_MS = 60000; // 60 seconds timeout for a chapter tab to load
-const SCRIPT_RESPONSE_TIMEOUT_MS = 30000; // 30 seconds timeout for scraper script response
+const SCRIPT_RESPONSE_TIMEOUT_MS = 180000; // 180 seconds timeout for image tab processing (fetch all images + zip)
 const IMAGE_FETCH_TIMEOUT_MS = 45000; // 45 seconds timeout for fetching a single image
 const IMAGE_FETCH_RETRIES = 3;       // Retries for failed image downloads
 const IMAGE_RETRY_DELAY_MS = 1000;   // Delay between image fetch retries

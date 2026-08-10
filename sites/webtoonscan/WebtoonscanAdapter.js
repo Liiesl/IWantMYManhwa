@@ -99,8 +99,8 @@ class WebtoonscanAdapter extends WebtoonscanContentAdapter {
                     reject(new Error(`Timeout waiting for image tab (${config.scriptResponseTimeoutMs / 1000}s)`));
                 }, config.scriptResponseTimeoutMs);
 
-                const listener = (message) => {
-                    if (message.action === "imageTabDone") {
+                const listener = (message, sender) => {
+                    if (message.action === "imageTabDone" && sender.tab?.id === imageTabId) {
                         clearTimeout(timeoutId);
                         chrome.runtime.onMessage.removeListener(listener);
                         resolve(message.payload);
