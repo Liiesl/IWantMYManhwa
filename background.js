@@ -26,6 +26,8 @@ try {
         'sites/asurascan/AsuraScansAdapter.js',
         'sites/arenascan/ArenascanContentAdapter.js',
         'sites/arenascan/ArenascanAdapter.js',
+        'sites/wfwf/WfwfContentAdapter.js',
+        'sites/wfwf/WfwfAdapter.js',
         'sites/SiteRegistry.js'
     );
     console.log("Site adapters loaded successfully.");
@@ -41,7 +43,7 @@ try {
 // --- Configuration ---
 const MAX_CONCURRENT_TABS = 3; // Max parallel chapter processing tabs
 const TAB_LOAD_TIMEOUT_MS = 60000; // 60 seconds timeout for a chapter tab to load
-const SCRIPT_RESPONSE_TIMEOUT_MS = 180000; // 180 seconds timeout for image tab processing (fetch all images + zip)
+const SCRIPT_RESPONSE_TIMEOUT_MS = 60000; // 60s IDLE timeout: fires only when the image tab worker sends no progress messages
 const IMAGE_FETCH_TIMEOUT_MS = 45000; // 45 seconds timeout for fetching a single image
 const IMAGE_FETCH_RETRIES = 3;       // Retries for failed image downloads
 const IMAGE_RETRY_DELAY_MS = 1000;   // Delay between image fetch retries
@@ -60,6 +62,9 @@ let currentDownloadState = {
     chaptersSucceeded: 0, // Chapters where download was *initiated*
     chaptersFailed: 0,    // Chapters that failed processing OR download initiation
     chaptersCancelled: 0, // Chapters cancelled by user
+    totalImagesRequested: 0, // Total images across all chapters (accumulated as chapters are scraped)
+    downloadedImages: 0,     // Total images successfully downloaded (from live worker progress)
+    chapterProgress: {},     // { chapterUrl: { total, lastReported } } for live image progress accounting
     title: '',
     activeTabIds: new Set(), // Track tabs we opened
     chapterQueue: [] // Queue of remaining chapters
@@ -167,12 +172,19 @@ function sendStopNotification() {
 
 function updateOverallProgress(textOverride = null) {
     if (currentDownloadState.isStopped) return; // Don't update progress if stopped
-    
-    const progress = currentDownloadState.chaptersRequested > 0
-        ? Math.floor((currentDownloadState.chaptersProcessed / currentDownloadState.chaptersRequested) * 100)
-        : 0;
-    
-    let statusText = textOverride || `Processed ${currentDownloadState.chaptersProcessed}/${currentDownloadState.chaptersRequested}...`;
+
+    const totalImages = currentDownloadState.totalImagesRequested;
+    const useImages = totalImages > 0;
+
+    const progress = useImages
+        ? Math.floor(Math.min(currentDownloadState.downloadedImages, totalImages) / totalImages * 100)
+        : (currentDownloadState.chaptersRequested > 0
+            ? Math.floor((currentDownloadState.chaptersProcessed / currentDownloadState.chaptersRequested) * 100)
+            : 0);
+
+    let statusText = textOverride || (useImages
+        ? `Downloading ${currentDownloadState.downloadedImages}/${totalImages} images (${currentDownloadState.chaptersProcessed}/${currentDownloadState.chaptersRequested} chapters)...`
+        : `Processed ${currentDownloadState.chaptersProcessed}/${currentDownloadState.chaptersRequested}...`);
 
     if (!textOverride && currentDownloadState.chaptersRequested > 0) {
          statusText += ` (Initiated: ${currentDownloadState.chaptersSucceeded}, Failed/Skipped: ${currentDownloadState.chaptersFailed})`;
@@ -331,11 +343,30 @@ async function processSingleChapter(chapter, chapterIndex, totalChapters, series
     const chapterLogPrefix = `[Ch ${chapterIndex + 1}/${totalChapters} "${chapter.name}"]`;
     const chapterDataForUi = { chapterId: chapter.url, chapterName: chapter.name };
 
-    console.log(`${chapterLogPrefix} Starting processing...`);
+console.log(`${chapterLogPrefix} Starting processing...`);
     
     // Status update helper
-    const updateStatus = (status, message) => {
-        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status, message });
+    const updateStatus = (status, message, extra = {}) => {
+        // Track live per-image progress for the image-weighted overall bar
+        if (status === 'fetching' && extra.progress && currentDownloadState.isActive && !currentDownloadState.isStopped && extra.progress.total > 0) {
+            const done = Math.min(extra.progress.done, extra.progress.total);
+            const entry = currentDownloadState.chapterProgress[chapter.url] || { total: 0, lastReported: 0 };
+            const delta = done >= entry.lastReported ? done - entry.lastReported : done; // Handle retry restarts
+            entry.lastReported = done;
+            currentDownloadState.chapterProgress[chapter.url] = entry;
+            currentDownloadState.downloadedImages += delta;
+        }
+        sendPopupMessage("updateChapterStatus", { ...chapterDataForUi, status, message, ...extra });
+        if (extra.progress) updateOverallProgress();
+    };
+
+    // Report total image count for this chapter once it is known (overall bar denominator)
+    const reportImageTotal = (total) => {
+        if (typeof total !== 'number' || !(total > 0)) return;
+        const entry = currentDownloadState.chapterProgress[chapter.url] || { total: 0, lastReported: 0 };
+        currentDownloadState.totalImagesRequested += (total - entry.total);
+        entry.total = total;
+        currentDownloadState.chapterProgress[chapter.url] = entry;
     };
 
     updateStatus("starting", "Opening tab...");
@@ -353,13 +384,13 @@ async function processSingleChapter(chapter, chapterIndex, totalChapters, series
 
     console.log(`${chapterLogPrefix} Using adapter: ${adapter.name}`);
 
-    // Delegate to adapter's downloadChapter method
+// Delegate to adapter's downloadChapter method
     try {
         const result = await adapter.downloadChapter(
             { chapter, index: chapterIndex, activeTabIds: currentDownloadState.activeTabIds },
             seriesTitle,
             updateStatus,
-            { sendPopupMessage }
+            { sendPopupMessage, reportImageTotal }
         );
         return result;
     } catch (error) {
@@ -397,6 +428,9 @@ async function handleBatchDownload(chapters, title) {
     currentDownloadState.chaptersSucceeded = 0; // Downloads initiated
     currentDownloadState.chaptersFailed = 0;    // Failed or skipped
     currentDownloadState.chaptersCancelled = 0; // Cancelled by user
+    currentDownloadState.totalImagesRequested = 0;
+    currentDownloadState.downloadedImages = 0;
+    currentDownloadState.chapterProgress = {};
     currentDownloadState.title = title;
     currentDownloadState.activeTabIds.clear();
     currentDownloadState.chapterQueue = [...chapters]; // Store queue in state for pause handling
@@ -684,6 +718,9 @@ chrome.runtime.onInstalled.addListener(details => {
         chaptersSucceeded: 0, 
         chaptersFailed: 0,
         chaptersCancelled: 0,
+        totalImagesRequested: 0,
+        downloadedImages: 0,
+        chapterProgress: {},
         title: '', 
         activeTabIds: new Set(),
         chapterQueue: []

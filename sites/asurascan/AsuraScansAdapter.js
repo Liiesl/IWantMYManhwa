@@ -80,33 +80,65 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
                 imageUrls: validImageUrls,
                 seriesTitle: seriesTitle,
                 chapterName: chapter.name,
-                chapterIndex: index
+                chapterIndex: index,
+                imageFetchTimeoutMs: config.imageFetchTimeoutMs,
+                imageFetchRetries: config.imageFetchRetries,
+                imageRetryDelayMs: config.imageRetryDelayMs
             };
 
-            const result = await new Promise((resolve, reject) => {
-                const timeoutId = setTimeout(() => {
-                    reject(new Error(`Timeout waiting for image tab (${config.scriptResponseTimeoutMs / 1000}s)`));
-                }, config.scriptResponseTimeoutMs);
+            if (options.reportImageTotal) options.reportImageTotal(validImageUrls.length);
 
-                const listener = (message, sender) => {
-                    if (message.action === "imageTabDone" && sender.tab?.id === imageTabId) {
-                        clearTimeout(timeoutId);
-                        chrome.runtime.onMessage.removeListener(listener);
-                        resolve(message.payload);
+            const maxAttempts = (config.scriptResponseRetries || 0) + 1;
+            let lastError = null;
+
+            const sendProgressStatus = (progress) => {
+                if (progress.type === 'image') {
+                    const total = progress.total || validImageUrls.length;
+                    const done = Math.min(progress.downloadedCount || 0, total);
+                    if (updateStatus) updateStatus('fetching', `Downloading ${done}/${total}...`, { progress: { done, total } });
+                } else if (progress.type === 'zip') {
+                    if (updateStatus) updateStatus('zipping', `Zipping... ${progress.percent}%`, { progress: { done: progress.percent, total: 100 } });
+                }
+            };
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                if (attempt > 1) {
+                    console.warn(`${chapterLogPrefix} Attempt ${attempt - 1} failed (${lastError?.message}). Retrying (${attempt}/${maxAttempts})...`);
+                    if (updateStatus) updateStatus('fetching', `Attempt ${attempt - 1} failed, retrying...`);
+                    try {
+                        await new Promise(r => setTimeout(r, 1500));
+                        await chrome.tabs.remove(imageTabId);
+                        activeTabIds.delete(imageTabId);
+                    } catch (e) {}
+                    const newImageTab = await chrome.tabs.create({ url: firstImageUrl, active: false });
+                    imageTabId = newImageTab.id;
+                    if (!imageTabId) throw new Error("Failed to recreate image tab.");
+                    activeTabIds.add(imageTabId);
+                    if (updateStatus) updateStatus('loading', 'Preparing image tab (retry)...');
+                    await this.waitForTabReady(imageTabId, config.tabLoadTimeoutMs);
+                    await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
+                    await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
+                }
+
+                if (updateStatus) updateStatus('fetching', 'Processing images...');
+
+                try {
+                    const result = await this.waitForImageTabResponse(imageTabId, workerData, {
+                        timeoutMs: config.scriptResponseTimeoutMs,
+                        onProgress: sendProgressStatus
+                    });
+
+                    if (result.status === 'success') {
+                        const finalMessage = result.failedImages > 0 ? `Downloaded (${result.failedImages} img failed)` : "Downloaded";
+                        if (updateStatus) updateStatus('complete', finalMessage);
+                        return { status: 'success', chapterName: chapter.name, failedImages: result.failedImages };
                     }
-                };
-
-                chrome.runtime.onMessage.addListener(listener);
-                chrome.tabs.sendMessage(imageTabId, { action: "processImages", data: workerData })
-                    .catch(err => { clearTimeout(timeoutId); reject(new Error(`Failed to send to image tab: ${err.message}`)); });
-            });
-
-            if (result.status === 'success') {
-                const finalMessage = result.failedImages > 0 ? `Downloaded (${result.failedImages} img failed)` : "Downloaded";
-                if (updateStatus) updateStatus('complete', finalMessage);
-                return { status: 'success', chapterName: chapter.name, failedImages: result.failedImages };
-            } else {
-                throw new Error(result.error || 'Image tab processing failed');
+                    throw new Error(result.error || 'Image tab processing failed');
+                } catch (error) {
+                    lastError = error;
+                    console.error(`${chapterLogPrefix} Attempt ${attempt} failed:`, error.message);
+                    if (attempt >= maxAttempts) throw error;
+                }
             }
 
         } catch (error) {

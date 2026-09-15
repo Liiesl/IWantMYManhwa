@@ -127,6 +127,11 @@ class SiteRegistry {
             this.register('arenascan', new ArenascanAdapter());
         }
 
+        // Register Wfwf adapter (wfwf*.com — domain number increments periodically)
+        if (typeof WfwfAdapter !== 'undefined') {
+            this.register('wfwf', new WfwfAdapter());
+        }
+
         console.log('[SiteRegistry] Initialized with adapters:', this.getRegisteredSites());
     }
 }

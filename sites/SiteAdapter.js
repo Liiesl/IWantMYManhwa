@@ -136,7 +136,8 @@ class SiteAdapter {
         return {
             maxConcurrentTabs: 3,
             tabLoadTimeoutMs: 60000,
-            scriptResponseTimeoutMs: 30000,
+            scriptResponseTimeoutMs: 60000,
+            scriptResponseRetries: 2,
             imageFetchTimeoutMs: 45000,
             imageFetchRetries: 3,
             imageRetryDelayMs: 1000,
@@ -226,6 +227,65 @@ class SiteAdapter {
      */
     async downloadChapter(chapterData, seriesTitle, updateStatus, options = {}) {
         throw new Error('downloadChapter() must be implemented by subclass');
+    }
+
+    /**
+     * Send work to the image tab worker and wait for its result.
+     * The timeout is a NO-COMMUNICATION (idle) timeout: it only fires after
+     * `timeoutMs` of silence from the worker tab. Any progress message
+     * ("chapterImageProgress") from the worker resets the timer.
+     * @param {number} imageTabId - Tab ID running the worker
+     * @param {Object} workerData - Data passed to the worker's processImages handler
+     * @param {Object} options - { timeoutMs, onProgress }
+     * @returns {Promise<Object>} Worker result payload
+     */
+    waitForImageTabResponse(imageTabId, workerData, options = {}) {
+        const { timeoutMs = 30000, onProgress } = options;
+        return new Promise((resolve, reject) => {
+            let timerId = null;
+            let finished = false;
+
+            const cleanup = () => {
+                clearTimeout(timerId);
+                chrome.runtime.onMessage.removeListener(listener);
+            };
+            const startTimer = () => {
+                timerId = setTimeout(() => {
+                    if (finished) return;
+                    finished = true;
+                    cleanup();
+                    reject(new Error(`No response from image tab worker (${Math.round(timeoutMs / 1000)}s)`));
+                }, timeoutMs);
+            };
+            const resetTimer = () => {
+                clearTimeout(timerId);
+                startTimer();
+            };
+            const listener = (message, sender) => {
+                if (sender.tab?.id !== imageTabId) return;
+                if (message.action === "imageTabDone") {
+                    if (finished) return;
+                    finished = true;
+                    cleanup();
+                    resolve(message.payload);
+                } else if (message.action === "chapterImageProgress") {
+                    resetTimer();
+                    if (typeof onProgress === 'function') {
+                        try { onProgress(message.payload); } catch (e) { console.warn("onProgress handler error:", e); }
+                    }
+                }
+            };
+
+            chrome.runtime.onMessage.addListener(listener);
+            startTimer();
+            chrome.tabs.sendMessage(imageTabId, { action: "processImages", data: workerData })
+                .catch(err => {
+                    if (finished) return;
+                    finished = true;
+                    cleanup();
+                    reject(new Error(`Failed to send to image tab: ${err.message}`));
+                });
+        });
     }
 
     /**

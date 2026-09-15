@@ -145,7 +145,7 @@ function ensureChapterUi(payload) {
 }
 
 function updateChapterUi(payload) {
-    const { chapterId, status, message } = payload; // Note: No fetched/total in new structure
+    const { chapterId, status, message, progress } = payload;
     const ui = ensureChapterUi(payload);
 
     ui.status.textContent = message || status; // Display detailed message
@@ -162,10 +162,8 @@ function updateChapterUi(payload) {
             ui.fill.style.width = '20%';
             break;
         case 'fetching':
-            // We don't get granular image progress anymore, show indeterminate/partial progress
-            ui.fill.style.width = '50%';
-             // Maybe parse message like "Downloading 10/20"? Requires background change.
-             // For now, just show 50% during fetch phase.
+        case 'zipping':
+            // Per-image / zip progress arrives via payload.progress and overrides below
             break;
         case 'complete':
             ui.item.classList.add('completed');
@@ -192,6 +190,12 @@ function updateChapterUi(payload) {
         default:
             ui.fill.style.width = '0%';
             break;
+    }
+
+    // Granular per-image / zip progress overrides the phase widths
+    if (progress && progress.total > 0) {
+        const pct = Math.min((progress.done / progress.total) * 100, 100);
+        ui.fill.style.width = pct + '%';
     }
 }
 
