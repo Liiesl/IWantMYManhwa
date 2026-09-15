@@ -15,16 +15,26 @@ Make sure you're on a supported website. The extension works with:
 - webtoonscan.com
 - asuracomic.net
 - arenascan.com
+- wfwfNNN.com (Wfwf / 늑대닷컴 — the number changes periodically; if the
+  panel says "not supported" right after a rotation, the adapter's explicit
+  domain needs a bump — report it via **Request Site**)
 
 If you see this message on a supported site, try clicking **Re-check**.
 
 ### Nothing happens when clicking Scan
 1. Wait for the page to fully load
 2. Ensure you're on a series page (not a chapter page)
-3. Check that the URL contains `/manhwa/` or `/series/`
+3. Check that the URL contains `/manhwa/`, `/series/`, or `/list?toon=`
 4. Try refreshing the page
 
 ## Download Issues
+
+### All images fail with 403 (Wfwf)
+Wfwf's image CDN only serves requests carrying a wfwf `Referer`. The
+extension forces this header at the network layer, but the rule follows
+the adapter's explicit domain — right after a domain rotation it may
+point at the old number until the adapter is updated. Reload the
+extension and retry; if it persists, report the current domain.
 
 ### Downloads start but fail immediately
 - Check your internet connection

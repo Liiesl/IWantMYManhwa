@@ -110,7 +110,30 @@ importScripts(
 );
 ```
 
-### Step 4: Update manifest.json
+### Step 4: Update sidepanel.html
+
+The side panel loads adapters via its own `<script>` tags for the
+support check — without these the panel reports "site is not supported":
+
+```html
+<script src="sites/SiteAdapter.js"></script>
+<script src="sites/yoursite/YoursiteContentAdapter.js"></script>
+<script src="sites/yoursite/YoursiteAdapter.js"></script>
+<script src="sites/SiteRegistry.js"></script>
+<script src="sidepanel.js"></script>
+```
+
+### Step 5: Register in SiteRegistry.js
+
+Add your adapter in `SiteRegistry.initialize()`:
+
+```javascript
+if (typeof YoursiteAdapter !== 'undefined') {
+    this.register('yoursite', new YoursiteAdapter());
+}
+```
+
+### Step 6: Update manifest.json
 
 Add host permissions:
 
@@ -121,11 +144,31 @@ Add host permissions:
 ]
 ```
 
-### Step 5: Build
+### Step 7: Build
 
 ```bash
 node build.js
 ```
+
+**Note:** `build.js` rewrites `host_permissions` and content-script
+`matches` in `manifest.json` from adapter `domains` on every run, and
+reloads the extension at `chrome://extensions/` afterwards — the
+background service worker keeps the old adapters in memory until reloaded.
+
+## Rotating domains & hotlink-protected CDNs
+
+Some sites increment their domain periodically (e.g. Wfwf:
+`wfwfNNN.com`) or serve images from a separate protected CDN. Chrome
+match patterns cannot express mid-host wildcards, and fetch-level
+`referrer` spoofing is ignored — see `sites/wfwf/README.md` for the
+established pattern:
+
+- Override `matchesUrl()` with a regex so support-checks work on any number.
+- Keep `domains` explicit (current number only); `build.js` derives
+  manifest entries from it.
+- If the image CDN 403s without a site `Referer`, force it at the network
+  layer with a `declarativeNetRequest` rule (generate the rules file in
+  `build.js` from the adapter's `domains` so rotations stay a one-line change).
 
 ## Adapter Methods
 

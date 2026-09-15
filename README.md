@@ -40,6 +40,8 @@ Compatibility with websites can change over time due to updates on their end. We
 * `[Webtoonscan | https://webtoonscan.com]`
 * `[AsuraScans | https://asuracomic.net]`
 * `[Arenascans | https://arenascan.com]`
+* `[Wfwf (늑대닷컴) | https://wfwf499.com]` — Korean raw site. Domain number increments periodically (wfwfNNN.com); see [`sites/wfwf/README.md`](sites/wfwf/README.md) for rotation maintenance.
+
 </details>
 
 <details>

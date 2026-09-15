@@ -28,6 +28,12 @@ This extension works with various manhwa and manhua sites. Below is the current 
 - **Status**: Fully supported
 - **Pattern**: `/manga/[series-name]/`
 
+### Wfwf (늑대닷컴)
+- **Domain**: wfwfNNN.com (number increments periodically, e.g. wfwf499.com)
+- **Content**: Korean raws (Korean-language webtoons and comics)
+- **Status**: Fully supported
+- **Pattern**: series `/list?toon=[id]/`, chapter `/view?toon=[id]&num=[n]/`
+
 ## Requesting New Sites
 
 If your favorite site isn't supported:
@@ -43,6 +49,7 @@ If your favorite site isn't supported:
 | WebtoonScan | Working | Primary testing site |
 | Asura Scans | Working | Both main and beta |
 | ArenaScans | Working | CDN-based image delivery |
+| Wfwf (늑대닷컴) | Working | Korean raws; rotating wfwfNNN.com domain, hotlink-protected image CDN |
 
 ## Technical Details
 

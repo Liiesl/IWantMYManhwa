@@ -25,6 +25,10 @@ sites/
 ├── arenascan/
 │   ├── ArenascanAdapter.js           # Full adapter (scraping + download)
 │   └── ArenascanContentAdapter.js    # Scraping only - for content.js
+├── wfwf/                             # Korean raw site (늑대닷컴), rotating wfwfNNN.com domain
+│   ├── WfwfAdapter.js                # Full adapter (scraping + download)
+│   ├── WfwfContentAdapter.js         # Scraping only - for content.js
+│   └── README.md                     # Site-specific notes (rotation procedure, CDN, selectors)
 └── ... (other sites)
 
 content.js           # GENERATED FILE (don't edit directly)
@@ -170,6 +174,23 @@ Add host permissions for your site:
 ```bash
 node build.js
 ```
+
+### Step 6: Reload the extension
+
+`chrome://extensions/` → Reload. The background service worker keeps the
+old adapters in memory until reloaded — a rebuild alone is not enough.
+
+## Rotating domains (Wfwf)
+
+Wfwf (늑대닷컴, Korean raw site) increments its domain (`wfwfNNN.com`)
+periodically. Its adapter matches any number via a `matchesUrl()` regex,
+but `manifest.json` needs the explicit current domain. To rotate:
+
+1. Update `domains` in `sites/wfwf/WfwfContentAdapter.js`.
+2. Run `node build.js` (regenerates `content.js`, `manifest.json`, and
+   `rules/wfwf_cdn_referer.json` from `domains`).
+3. Reload the extension. See `sites/wfwf/README.md` for details
+   (selectors, hotlink-protected CDN, reference snapshots).
 
 ## Important Notes
 
