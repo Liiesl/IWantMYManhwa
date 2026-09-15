@@ -90,7 +90,16 @@ console.log("[Content Script] Ready");
 const CONTENT_ADAPTER_FILES = [
     'webtoonscan/WebtoonscanContentAdapter.js',
     'asurascan/AsuraScansContentAdapter.js',
-    'arenascan/ArenascanContentAdapter.js'
+    'arenascan/ArenascanContentAdapter.js',
+    'wfwf/WfwfContentAdapter.js'
+];
+
+// Extra host permissions that can't be derived from adapter `domains`
+// (e.g. Wfwf image CDN y17stm.com — kept explicit per project decision;
+// update here when the site/CDN number rotates, as build.js rewrites manifest.json)
+const EXTRA_HOST_PERMISSIONS = [
+    '*://y17stm.com/*',
+    '*://*.y17stm.com/*'
 ];
 
 // Registry file
@@ -175,13 +184,49 @@ function updateManifest() {
         }
     }
 
-    manifest.host_permissions = [...hostPermissions].sort();
+    manifest.host_permissions = [...hostPermissions, ...EXTRA_HOST_PERMISSIONS].sort();
     if (manifest.content_scripts && manifest.content_scripts.length > 0) {
         manifest.content_scripts[0].matches = [...contentMatches].sort();
     }
 
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
     console.log('  ✓ Updated manifest.json');
+}
+
+function updateWfwfDnrRules() {
+    // The wfwf image CDN enforces hotlink protection: requests without a wfwf
+    // Referer get 403 + a Cloudflare block page. Fetch-level `referrer` spoofing
+    // is not honored, so force the header at the network layer instead.
+    // The Referer value is derived from the adapter's current `domains` so a
+    // domain rotation only needs the domains[] bump + rebuild.
+    const adapterPath = path.join(ADAPTER_DIR, 'wfwf/WfwfContentAdapter.js');
+    if (!fs.existsSync(adapterPath)) return;
+
+    const info = extractAdapterInfo(adapterPath);
+    const mainDomain = info.domains.find(d => /^wfwf\d*\.com$/i.test(d)) || info.domains[0];
+    if (!mainDomain) return;
+
+    const rules = [
+        {
+            id: 1,
+            priority: 1,
+            action: {
+                type: 'modifyHeaders',
+                requestHeaders: [
+                    { header: 'Referer', operation: 'set', value: `https://${mainDomain}/` }
+                ]
+            },
+            condition: {
+                // Image CDN host also rotates (y17stm.com, ...), so match by pattern
+                regexFilter: '^https://[A-Za-z0-9.-]*stm\\.com/',
+                resourceTypes: ['main_frame', 'image', 'xmlhttprequest']
+            }
+        }
+    ];
+
+    fs.mkdirSync('./rules', { recursive: true });
+    fs.writeFileSync('./rules/wfwf_cdn_referer.json', JSON.stringify(rules, null, 2) + '\n', 'utf8');
+    console.log(`  ✓ Updated rules/wfwf_cdn_referer.json (Referer: https://${mainDomain}/)`);
 }
 
 async function build() {
@@ -308,6 +353,7 @@ async function build() {
     console.log(`  Savings:  ${(savings / 1024).toFixed(2)} KB (${savingsPercent}%)`);
 
     updateManifest();
+    updateWfwfDnrRules();
 
     console.log(`\nDone! Load the extension in Chrome.\n`);
 }

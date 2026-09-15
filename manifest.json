@@ -10,24 +10,38 @@
     "downloads",
     "storage",
     "tabs",
-    "alarms"
+    "alarms",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "*://*.arenascan.com/*",
     "*://*.asurascans.com/*",
     "*://*.webtoonscan.com/*",
+    "*://*.wfwf499.com/*",
+    "*://*.y17stm.com/*",
     "*://cdn.arenascan.com/*",
-    "*://cdn4.webtoonscan.com/*"
+    "*://cdn4.webtoonscan.com/*",
+    "*://y17stm.com/*"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "wfwf_cdn_referer",
+        "enabled": true,
+        "path": "rules/wfwf_cdn_referer.json"
+      }
+    ]
   },
   "content_scripts": [
     {
       "matches": [
         "*://*.arenascan.com/manga/*",
         "*://*.asurascans.com/comics/*",
-        "*://*.webtoonscan.com/manhwa/*"
+        "*://*.webtoonscan.com/manhwa/*",
+        "*://*.wfwf499.com/list*"
       ],
       "js": [
         "content.js"

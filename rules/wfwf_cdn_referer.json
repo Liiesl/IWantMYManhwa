@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://wfwf499.com/"
+        }
+      ]
+    },
+    "condition": {
+      "regexFilter": "^https://[A-Za-z0-9.-]*stm\\.com/",
+      "resourceTypes": [
+        "main_frame",
+        "image",
+        "xmlhttprequest"
+      ]
+    }
+  }
+]

@@ -6,6 +6,12 @@ const IMAGE_FETCH_TIMEOUT_MS = 45000;
 const IMAGE_FETCH_RETRIES = 3;
 const IMAGE_RETRY_DELAY_MS = 1000;
 const ZIP_COMPRESSION_LEVEL = 6;
+const ZIP_PROGRESS_THROTTLE_PERCENT = 5;
+
+function sendProgress(payload) {
+    chrome.runtime.sendMessage({ action: "chapterImageProgress", payload })
+        .catch(() => { });
+}
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -69,20 +75,25 @@ function extractChapterNumber(name, index) {
     return index + 1;
 }
 
-async function fetchSingleImage(imageUrl, logPrefix) {
-    let retries = IMAGE_FETCH_RETRIES;
-    let delay = IMAGE_RETRY_DELAY_MS;
+async function fetchSingleImage(imageUrl, logPrefix, timeoutMs = IMAGE_FETCH_TIMEOUT_MS, retryCount = IMAGE_FETCH_RETRIES, retryDelayMs = IMAGE_RETRY_DELAY_MS, fetchOptions = {}) {
+    let retries = retryCount;
+    let delay = retryDelayMs;
     let lastError = null;
 
     while (retries >= 0) {
-        const attempt = IMAGE_FETCH_RETRIES - retries + 1;
+        const attempt = retryCount - retries + 1;
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
             const response = await fetch(imageUrl, {
                 mode: 'cors',
-                signal: controller.signal
+                signal: controller.signal,
+                // Hotlink-protected CDNs (e.g. wfwf's image host) reject requests
+                // without a site Referer. `referrer` may be cross-origin here;
+                // `unsafe-url` guarantees the full URL is sent regardless of the
+                // embedding page's own Referrer-Policy (e.g. Cloudflare block pages).
+                ...(fetchOptions.referrer ? { referrer: fetchOptions.referrer, referrerPolicy: 'unsafe-url' } : {})
             });
             clearTimeout(timeoutId);
 
@@ -118,8 +129,10 @@ async function fetchSingleImage(imageUrl, logPrefix) {
 }
 
 async function processChapter(data) {
-    const { imageUrls, seriesTitle, chapterName, chapterIndex } = data;
+    const { imageUrls, seriesTitle, chapterName, chapterIndex, imageFetchTimeoutMs, imageFetchRetries, imageRetryDelayMs, referrer } = data;
     const logPrefix = `[ImageTab Worker Ch${chapterIndex + 1}]`;
+    const fetchOptions = referrer ? { referrer } : {};
+    console.log(`${logPrefix} Referrer for image fetches: ${referrer || '(none — hotlink-protected CDNs may 403)'}`);
 
     console.log(`${logPrefix} Starting. ${imageUrls.length} images to process.`);
 
@@ -139,11 +152,15 @@ async function processChapter(data) {
     let downloadedCount = 0;
     let failedImageCount = 0;
 
+    sendProgress({ type: 'image', downloadedCount: 0, failedCount: 0, total: imageUrls.length });
+
     for (let i = 0; i < imageUrls.length; i++) {
         const imageUrl = imageUrls[i];
         const imageLogPrefix = `${logPrefix} Img ${i + 1}/${imageUrls.length}`;
 
-        const blob = await fetchSingleImage(imageUrl, imageLogPrefix);
+        sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
+
+        const blob = await fetchSingleImage(imageUrl, imageLogPrefix, imageFetchTimeoutMs, imageFetchRetries, imageRetryDelayMs, fetchOptions);
 
         if (blob) {
             let fileExtension = 'jpg';
@@ -179,6 +196,8 @@ async function processChapter(data) {
             failedImageCount++;
             console.error(`${imageLogPrefix} Failed to fetch.`);
         }
+
+        sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
     }
 
     if (downloadedCount === 0 && imageUrls.length > 0) {
@@ -187,10 +206,17 @@ async function processChapter(data) {
     }
 
     console.log(`${logPrefix} Creating ZIP: ${zipFilename}`);
+    let lastZipPercent = 0;
     const zipBlob = await chapterZip.generateAsync({
         type: "blob",
         compression: "DEFLATE",
         compressionOptions: { level: ZIP_COMPRESSION_LEVEL }
+    }, (metadata) => {
+        const percent = Math.floor(metadata.percent);
+        if (percent >= 100 || percent - lastZipPercent >= ZIP_PROGRESS_THROTTLE_PERCENT) {
+            lastZipPercent = percent;
+            sendProgress({ type: 'zip', percent });
+        }
     });
 
     // Use FileReader to convert blob to data URL for download
