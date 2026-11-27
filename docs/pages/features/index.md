@@ -31,7 +31,10 @@ Monitor download progress in real-time:
 Control your downloads:
 - **Pause**: Stop new chapters from starting
 - **Resume**: Continue downloading from where you left off
+- **Remove**: Remove a queued chapter before it starts processing
 - **Stop**: Cancel all remaining downloads
+
+Active chapters cannot be removed once processing has started.
 
 ## Multi-Site Support
 
@@ -40,14 +43,7 @@ Works with various manhwa and manhua sites through an adapter system. New sites 
 ## Organized Output
 
 Downloads are organized automatically:
-- Each chapter in its own folder
-- Images numbered sequentially
-- Series title included in folder structure
-- Everything packaged in a single ZIP file
-
-## ZIP Compression
-
-All chapters are compressed into a single ZIP file for easy:
-- Storage
-- Transfer
-- Organization
+- Choose ZIP to receive each chapter's images in a numbered folder.
+- Choose PDF to receive one ordered, image-per-page PDF for each chapter.
+- Choose combined PDF to put the selected chapters, in order, into one image-per-page PDF.
+- Series and chapter names are included in downloaded filenames.

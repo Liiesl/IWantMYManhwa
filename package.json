@@ -25,5 +25,8 @@
   "homepage": "https://github.com/Liiesl/IWantMYManhwa#readme",
   "devDependencies": {
     "terser": "^5.46.0"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
   }
 }

@@ -13,6 +13,7 @@ const manhwaTitleEl = document.getElementById('manhwaTitle');
 const chapterCountEl = document.getElementById('chapterCount');
 const startChapterInput = document.getElementById('startChapter');
 const endChapterInput = document.getElementById('endChapter');
+const outputFormatInput = document.getElementById('outputFormat');
 const overallStatusMessageEl = document.getElementById('overallStatusMessage');
 const overallProgressContainerEl = document.getElementById('overallProgressContainer');
 const progressVisual = document.getElementById('progress-visual'); // Visible overall bar fill
@@ -38,7 +39,7 @@ function setOverallStatus(message, isError = false, isComplete = false) {
     console.log(`Overall Status Update: ${message}`);
 }
 
-// Only used for the final ZIP generation progress now
+// Used for the final ZIP or PDF generation progress.
 function updateOverallProgress(text, percent = -1) {
     overallProgressContainerEl.style.display = 'block'; // Ensure visible
     progressText.textContent = text;
@@ -109,8 +110,18 @@ function ensureChapterUi(payload) {
         statusSpan.className = 'chapter-status';
         statusSpan.textContent = 'Waiting...'; // Initial status
 
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'remove-chapter-button';
+        removeButton.textContent = 'Remove';
+        removeButton.title = 'Remove this chapter from the download queue';
+        removeButton.setAttribute('aria-label', `Remove ${chapterName || 'chapter'} from the download queue`);
+        removeButton.hidden = true;
+        removeButton.addEventListener('click', () => removeQueuedChapter(chapterId));
+
         infoDiv.appendChild(nameSpan);
         infoDiv.appendChild(statusSpan);
+        infoDiv.appendChild(removeButton);
 
         const trackDiv = document.createElement('div');
         trackDiv.className = 'chapter-progress-track';
@@ -130,6 +141,7 @@ function ensureChapterUi(payload) {
             item: item,
             name: nameSpan,
             status: statusSpan,
+            removeButton,
             fill: fillDiv,
             track: trackDiv
         };
@@ -140,6 +152,7 @@ function ensureChapterUi(payload) {
     if (chapterName && chapterUiElements[chapterId] && chapterUiElements[chapterId].name.textContent !== chapterName) {
         chapterUiElements[chapterId].name.textContent = chapterName;
         chapterUiElements[chapterId].name.title = chapterName;
+        chapterUiElements[chapterId].removeButton.setAttribute('aria-label', `Remove ${chapterName} from the download queue`);
     }
     return chapterUiElements[chapterId];
 }
@@ -152,6 +165,7 @@ function updateChapterUi(payload) {
     ui.item.className = 'chapter-progress-item'; // Reset classes
     ui.fill.style.backgroundColor = 'var(--accent-color)'; // Reset color
     ui.fill.style.width = '0%'; // Reset width, update based on status
+    ui.removeButton.hidden = status !== 'pending';
 
     switch (status) {
         case 'starting':
@@ -186,6 +200,11 @@ function updateChapterUi(payload) {
              ui.fill.style.width = '100%';
              ui.fill.style.backgroundColor = '#9E9E9E'; // Grey for skipped
              break;
+         case 'cancelled':
+             ui.item.classList.add('cancelled');
+             ui.fill.style.width = '100%';
+             ui.fill.style.backgroundColor = '#9E9E9E';
+             break;
         case 'pending':
         default:
             ui.fill.style.width = '0%';
@@ -196,6 +215,36 @@ function updateChapterUi(payload) {
     if (progress && progress.total > 0) {
         const pct = Math.min((progress.done / progress.total) * 100, 100);
         ui.fill.style.width = pct + '%';
+    }
+}
+
+async function removeQueuedChapter(chapterId) {
+    const ui = chapterUiElements[chapterId];
+    if (!isDownloading || !ui || ui.removeButton.hidden || ui.removeButton.disabled) return;
+
+    ui.removeButton.disabled = true;
+    try {
+        const response = await chrome.runtime.sendMessage({
+            action: 'removeQueuedChapter',
+            chapterUrl: chapterId
+        });
+        if (!response?.success) {
+            ui.removeButton.disabled = false;
+            setOverallStatus(response?.message || 'Could not remove this chapter from the queue.', true);
+            return;
+        }
+
+        updateChapterUi({
+            chapterId,
+            chapterName: response.chapterName || ui.name.textContent,
+            status: 'cancelled',
+            message: 'Removed from queue'
+        });
+        setOverallStatus(`Removed ${response.chapterName || ui.name.textContent} from the download queue.`);
+    } catch (error) {
+        ui.removeButton.disabled = false;
+        console.error('Error removing chapter from queue:', error);
+        setOverallStatus(`Could not remove chapter: ${error.message}`, true);
     }
 }
 
@@ -323,7 +372,8 @@ downloadBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({
         action: "startDownload",
         chapters: chaptersToDownload,
-        title: currentManhwaTitle
+        title: currentManhwaTitle,
+        format: outputFormatInput.value
     }).catch(error => {
          console.error("Error sending startDownload message:", error);
          setOverallStatus(`Error starting download: ${error.message}`, true);
@@ -381,17 +431,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case "updateProgress": // Now used for overall progress/status text from background
              if(isDownloading) {
-                 // Check if it contains zip progress or just a status update
+                 // Check if it contains archive/PDF progress or just a status update.
                  const percentMatch = message.payload?.text?.match(/(\d+)%/);
                  if (percentMatch) {
                      updateOverallProgress(message.payload.text, parseInt(percentMatch[1], 10));
-                 } else if (message.payload?.text?.toLowerCase().includes("generating zip") || message.payload?.text?.toLowerCase().includes("compressing")) {
+                 } else if (message.payload?.text?.toLowerCase().includes("generating zip")
+                     || message.payload?.text?.toLowerCase().includes("compiling pdf")
+                     || message.payload?.text?.toLowerCase().includes("compressing")) {
                      updateOverallProgress(message.payload.text); // Update text, show bar
                  } else {
                      // General status update during processing phases
                      setOverallStatus(message.payload.text);
-                     // Optionally hide overall progress bar if it's not zipping stage
-                     if (!message.payload?.text?.toLowerCase().includes("zip")) {
+                     if (!message.payload?.text?.toLowerCase().includes("zip")
+                         && !message.payload?.text?.toLowerCase().includes("pdf")) {
                          hideOverallProgress();
                      }
                  }
@@ -402,8 +454,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const { success, message: finalMsg, totalChaptersSucceeded, totalChaptersRequested } = message.payload;
              const displayMsg = finalMsg || (success ? `Download complete (${totalChaptersSucceeded}/${totalChaptersRequested})` : 'Download failed.');
             setOverallStatus(displayMsg, !success, success);
-            // Keep overall progress hidden unless it was zipping just before this
-            if (!overallStatusMessageEl.textContent.includes("ZIP")) {
+            // Keep overall progress visible when the final status includes ZIP/PDF progress.
+            if (!overallStatusMessageEl.textContent.includes("ZIP")
+                && !overallStatusMessageEl.textContent.includes("PDF")) {
                  hideOverallProgress();
             }
             isDownloading = false;
@@ -423,8 +476,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
         }
         case "downloadStopped": {
-            const { totalChaptersSucceeded, totalChaptersRequested } = message.payload;
-            setOverallStatus(`Download stopped. Completed: ${totalChaptersSucceeded}/${totalChaptersRequested}`, false, false);
+            const { totalChaptersSucceeded, totalChaptersRequested, totalChaptersCancelled = 0 } = message.payload;
+            setOverallStatus(`Download stopped. Completed: ${totalChaptersSucceeded}/${totalChaptersRequested}, cancelled: ${totalChaptersCancelled}.`, false, false);
             isDownloading = false;
             isPaused = false;
             hideDownloadControls();

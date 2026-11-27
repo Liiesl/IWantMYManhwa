@@ -19,6 +19,7 @@
 ## Features
 * **Multi-Site Support:** Extensible adapter system allows easy addition of new sites
 * **Bulk Downloading:** Download multiple chapters simultaneously.
+* **Flexible Downloads:** Choose ZIP archives, a PDF per chapter, or one PDF combining the selected chapters.
 * **Side Panel Interface:** Utilizes Chrome's Side Panel for an easily accessible and persistent UI while Browse.
 * **Simple Controls:** Easy selection of chapters and download initiation within the side panel.
 * **Manifest V3:** Built using the latest Chrome extension platform standards for improved security, performance, and privacy.
@@ -40,7 +41,8 @@ Compatibility with websites can change over time due to updates on their end. We
 * `[Webtoonscan | https://webtoonscan.com]`
 * `[AsuraScans | https://asuracomic.net]`
 * `[Arenascans | https://arenascan.com]`
-* `[Wfwf (늑대닷컴) | https://wfwf499.com]` — Korean raw site. Domain number increments periodically (wfwfNNN.com); see [`sites/wfwf/README.md`](sites/wfwf/README.md) for rotation maintenance.
+* `[Wfwf (늑대닷컴) | https://wfwf499.com]` — Korean raw site. Domain number increments periodically (wfwfNNN.com); see [`sites/wfwf/README.md`](sites/wfwf/README.md) for rotation maintenance
+* ADDED Manhwaread.com
 
 </details>
 

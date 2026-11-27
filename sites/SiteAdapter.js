@@ -229,6 +229,19 @@ class SiteAdapter {
         throw new Error('downloadChapter() must be implemented by subclass');
     }
 
+    async loadImageWorker(tabId, format = 'zip') {
+        // Inject only the selected format's library into the chapter tab.
+        const library = format === 'pdf' || format === 'pdf-combined'
+            ? 'pdf-lib.min.js'
+            : format === 'zip'
+                ? 'jszip.min.js'
+                : null;
+        if (!library) throw new Error(`Unsupported download format: ${format}`);
+
+        await chrome.scripting.executeScript({ target: { tabId }, files: [library] });
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['imageTabWorker.js'] });
+    }
+
     /**
      * Send work to the image tab worker and wait for its result.
      * The timeout is a NO-COMMUNICATION (idle) timeout: it only fires after

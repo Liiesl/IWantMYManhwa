@@ -91,7 +91,8 @@ const CONTENT_ADAPTER_FILES = [
     'webtoonscan/WebtoonscanContentAdapter.js',
     'asurascan/AsuraScansContentAdapter.js',
     'arenascan/ArenascanContentAdapter.js',
-    'wfwf/WfwfContentAdapter.js'
+    'wfwf/WfwfContentAdapter.js',
+    'manhwaread/ManhwaReadContentAdapter.js'
 ];
 
 // Extra host permissions that can't be derived from adapter `domains`
@@ -177,9 +178,13 @@ function updateManifest() {
         }
 
         const nonCdnDomains = info.domains.filter(d => !d.includes('cdn'));
-        if (nonCdnDomains.length > 0 && info.urlPattern) {
+        if (nonCdnDomains.length > 0) {
             for (const domain of nonCdnDomains) {
-                contentMatches.add(`*://*.${domain}${info.urlPattern}*`);
+                // Some sites, including ManhwaRead, do not expose one listing-path pattern.
+                const matchPattern = info.urlPattern
+                    ? `*://*.${domain}${info.urlPattern}*`
+                    : `*://*.${domain}/*`;
+                contentMatches.add(matchPattern);
             }
         }
     }
@@ -231,6 +236,15 @@ function updateWfwfDnrRules() {
 
 async function build() {
     console.log('Building content.js from ContentAdapter files...\n');
+
+    // Injected page scripts need the browser UMD bundle, not Node's package entry point.
+    const pdfLibSource = './node_modules/pdf-lib/dist/pdf-lib.min.js';
+    if (!fs.existsSync(pdfLibSource)) {
+        throw new Error('pdf-lib is missing. Run npm install before building.');
+    }
+    fs.copyFileSync(pdfLibSource, './pdf-lib.min.js');
+    fs.copyFileSync('./node_modules/pdf-lib/LICENSE.md', './pdf-lib-LICENSE.md');
+    console.log('  ✓ Bundled: pdf-lib.min.js');
     
     let adapterCode = '';
     let registryCode = '';

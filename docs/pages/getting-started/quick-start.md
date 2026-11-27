@@ -34,18 +34,23 @@ Use the Start and End inputs to choose which chapters to download:
 
 ## Step 5: Download
 
-Click the **Download** button. The extension will:
+Choose **ZIP (images)**, **PDF (one per chapter)**, or **PDF (combine selected chapters)**, then click the **Download** button. The extension will:
 - Download each chapter's images
-- Create a ZIP file organized by chapter
+- Create the selected ZIP or PDF output
 - Save it to your Downloads folder
+
+Combined PDF downloads process chapters sequentially to preserve the selected order.
 
 ## During Download
 
 You can:
 - **Pause**: Temporarily stop downloading
 - **Resume**: Continue from where you paused  
+- **Remove**: Remove a queued chapter that has not started yet
 - **Stop**: Cancel remaining downloads
+
+Active chapters cannot be removed once processing has started.
 
 ## Accessing Your Files
 
-Downloaded ZIP files are saved to your browser's default download location. Extract them to read offline!
+Downloaded files are saved to your browser's default download location. Extract ZIPs or open PDFs to read offline.

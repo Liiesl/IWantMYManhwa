@@ -75,6 +75,79 @@ function extractChapterNumber(name, index) {
     return index + 1;
 }
 
+async function preparePdfImage(blob) {
+    const bitmap = await createImageBitmap(blob);
+    // Cap oversized source images to stay below common PDF page-size limits.
+    const scale = Math.min(1, 14400 / Math.max(bitmap.width, bitmap.height));
+    const pixelWidth = Math.max(1, Math.round(bitmap.width * scale));
+    const pixelHeight = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+
+    try {
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Could not prepare an image for the PDF.');
+        context.drawImage(bitmap, 0, 0, pixelWidth, pixelHeight);
+        // Normalize formats such as WebP to JPEG, which pdf-lib can embed directly.
+        const jpegBlob = await new Promise((resolve, reject) => {
+            canvas.toBlob(result => result
+                ? resolve(result)
+                : reject(new Error('Could not encode an image for the PDF.')), 'image/jpeg', 0.94);
+        });
+        const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+        return {
+            jpegBytes,
+            pageWidth: pixelWidth * 0.75,
+            pageHeight: pixelHeight * 0.75
+        };
+    } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+        bitmap.close();
+    }
+}
+
+async function addImageToPdf(pdf, blob) {
+    const { jpegBytes, pageWidth, pageHeight } = await preparePdfImage(blob);
+    const image = await pdf.embedJpg(jpegBytes);
+    // Give every source image its own page and preserve its aspect ratio.
+    const page = pdf.addPage([pageWidth, pageHeight]);
+    page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+}
+
+async function sendCombinedPdfPage(blob, chapterIndex, imageIndex) {
+    const { jpegBytes, pageWidth, pageHeight } = await preparePdfImage(blob);
+    let binary = '';
+    for (let offset = 0; offset < jpegBytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...jpegBytes.subarray(offset, offset + 0x8000));
+    }
+
+    const response = await chrome.runtime.sendMessage({
+        action: 'combinedPdfPage',
+        payload: {
+            imageData: btoa(binary),
+            pageWidth,
+            pageHeight,
+            chapterIndex,
+            imageIndex
+        }
+    });
+    if (!response?.success) {
+        throw new Error(response?.error || 'Could not add an image to the combined PDF.');
+    }
+}
+
+function triggerBlobDownload(blob, filename) {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.click();
+    // Let Chrome begin reading the blob before releasing its temporary URL.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 async function fetchSingleImage(imageUrl, logPrefix, timeoutMs = IMAGE_FETCH_TIMEOUT_MS, retryCount = IMAGE_FETCH_RETRIES, retryDelayMs = IMAGE_RETRY_DELAY_MS, fetchOptions = {}) {
     let retries = retryCount;
     let delay = retryDelayMs;
@@ -130,30 +203,42 @@ async function fetchSingleImage(imageUrl, logPrefix, timeoutMs = IMAGE_FETCH_TIM
 
 async function processChapter(data) {
     const { imageUrls, seriesTitle, chapterName, chapterIndex, imageFetchTimeoutMs, imageFetchRetries, imageRetryDelayMs, referrer } = data;
+    const outputFormat = data.outputFormat || 'zip';
     const logPrefix = `[ImageTab Worker Ch${chapterIndex + 1}]`;
     const fetchOptions = referrer ? { referrer } : {};
     console.log(`${logPrefix} Referrer for image fetches: ${referrer || '(none — hotlink-protected CDNs may 403)'}`);
 
-    console.log(`${logPrefix} Starting. ${imageUrls.length} images to process.`);
-
+    if (!['zip', 'pdf', 'pdf-combined'].includes(outputFormat)) {
+        return { status: 'failed', error: `Unsupported download format: ${outputFormat}` };
+    }
     if (!imageUrls || imageUrls.length === 0) {
         console.error(`${logPrefix} No image URLs provided.`);
         return { status: 'failed', error: 'No image URLs' };
+    }
+    console.log(`${logPrefix} Starting. ${imageUrls.length} images to process.`);
+    if (outputFormat !== 'zip' && (typeof PDFLib === 'undefined' || typeof PDFLib.PDFDocument?.create !== 'function')) {
+        return { status: 'failed', error: 'PDF library is not loaded.' };
+    }
+    if (outputFormat === 'zip' && typeof JSZip !== 'function') {
+        return { status: 'failed', error: 'ZIP library is not loaded.' };
     }
 
     const chapterNumberStr = extractChapterNumber(chapterName, chapterIndex);
     const sanitizedSeriesTitle = sanitizeFilename(seriesTitle || 'WebtoonScan_Download', true);
     const sanitizedChapterNamePart = sanitizeFilename(chapterName || 'unknown', false);
-    const zipFilename = `${sanitizedSeriesTitle}_Ch_${chapterNumberStr}_(${sanitizedChapterNamePart}).zip`;
+    const extension = outputFormat === 'zip' ? 'zip' : 'pdf';
+    const filename = `${sanitizedSeriesTitle}_Ch_${chapterNumberStr}_(${sanitizedChapterNamePart}).${extension}`;
 
-    const chapterZip = new JSZip();
-    const numberedFolder = chapterZip.folder(chapterNumberStr);
+    const chapterZip = outputFormat === 'zip' ? new JSZip() : null;
+    const numberedFolder = chapterZip?.folder(chapterNumberStr);
+    const pdf = outputFormat === 'pdf' ? await PDFLib.PDFDocument.create() : null;
 
     let downloadedCount = 0;
     let failedImageCount = 0;
 
     sendProgress({ type: 'image', downloadedCount: 0, failedCount: 0, total: imageUrls.length });
 
+    // Process in source order so the PDF page order matches the chapter.
     for (let i = 0; i < imageUrls.length; i++) {
         const imageUrl = imageUrls[i];
         const imageLogPrefix = `${logPrefix} Img ${i + 1}/${imageUrls.length}`;
@@ -163,6 +248,33 @@ async function processChapter(data) {
         const blob = await fetchSingleImage(imageUrl, imageLogPrefix, imageFetchTimeoutMs, imageFetchRetries, imageRetryDelayMs, fetchOptions);
 
         if (blob) {
+            if (pdf) {
+                try {
+                    await addImageToPdf(pdf, blob);
+                    downloadedCount++;
+                    console.log(`${imageLogPrefix} Added page to PDF.`);
+                } catch (pdfError) {
+                    failedImageCount++;
+                    console.error(`${imageLogPrefix} Error adding image to PDF:`, pdfError);
+                }
+                sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
+                continue;
+            }
+
+            if (outputFormat === 'pdf-combined') {
+                try {
+                    // Await each page append so the background PDF retains image order.
+                    await sendCombinedPdfPage(blob, chapterIndex, i);
+                    downloadedCount++;
+                    console.log(`${imageLogPrefix} Added page to combined PDF.`);
+                } catch (pdfError) {
+                    failedImageCount++;
+                    console.error(`${imageLogPrefix} Error adding image to combined PDF:`, pdfError);
+                }
+                sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
+                continue;
+            }
+
             let fileExtension = 'jpg';
             if (blob.type && blob.type.startsWith('image/')) {
                 const subtype = blob.type.split('/')[1];
@@ -205,35 +317,45 @@ async function processChapter(data) {
         return { status: 'failed', error: 'All images failed' };
     }
 
-    console.log(`${logPrefix} Creating ZIP: ${zipFilename}`);
+    if (outputFormat === 'pdf-combined') {
+        console.log(`${logPrefix} Added ${downloadedCount} pages to the combined PDF.`);
+        return { status: 'success', failedImages: failedImageCount };
+    }
+
+    console.log(`${logPrefix} Creating ${outputFormat.toUpperCase()}: ${filename}`);
     let lastZipPercent = 0;
-    const zipBlob = await chapterZip.generateAsync({
-        type: "blob",
-        compression: "DEFLATE",
-        compressionOptions: { level: ZIP_COMPRESSION_LEVEL }
-    }, (metadata) => {
-        const percent = Math.floor(metadata.percent);
-        if (percent >= 100 || percent - lastZipPercent >= ZIP_PROGRESS_THROTTLE_PERCENT) {
-            lastZipPercent = percent;
-            sendProgress({ type: 'zip', percent });
+    let outputBlob;
+    if (pdf) {
+        sendProgress({ type: 'pdf', percent: 0 });
+        // Keep the background's idle-response timer alive while a large PDF is serialized.
+        const progressHeartbeat = setInterval(() => sendProgress({ type: 'pdf', percent: 0 }), 10000);
+        let pdfBytes;
+        try {
+            pdfBytes = await pdf.save({
+                updateFieldAppearances: false,
+                objectsPerTick: 50
+            });
+        } finally {
+            clearInterval(progressHeartbeat);
         }
-    });
+        outputBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+        sendProgress({ type: 'pdf', percent: 100 });
+    } else {
+        outputBlob = await chapterZip.generateAsync({
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: { level: ZIP_COMPRESSION_LEVEL }
+        }, (metadata) => {
+            const percent = Math.floor(metadata.percent);
+            if (percent >= 100 || percent - lastZipPercent >= ZIP_PROGRESS_THROTTLE_PERCENT) {
+                lastZipPercent = percent;
+                sendProgress({ type: 'zip', percent });
+            }
+        });
+    }
 
-    // Use FileReader to convert blob to data URL for download
-    const zipDataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("Failed to read ZIP blob"));
-        reader.readAsDataURL(zipBlob);
-    });
-
-    // Trigger download via anchor click
-    const a = document.createElement('a');
-    a.href = zipDataUrl;
-    a.download = zipFilename;
-    a.click();
-
-    console.log(`${logPrefix} Download triggered: ${zipFilename}`);
+    triggerBlobDownload(outputBlob, filename);
+    console.log(`${logPrefix} Download triggered: ${filename}`);
     return { status: 'success', failedImages: failedImageCount };
 }
 
@@ -245,6 +367,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     action: "imageTabDone",
                     payload: result
                 }).catch(e => console.error("Failed to send done message:", e));
+            })
+            .catch(error => {
+                console.error("[ImageTab Worker] Chapter processing failed:", error);
+                chrome.runtime.sendMessage({
+                    action: "imageTabDone",
+                    payload: { status: 'failed', error: error.message }
+                }).catch(sendError => console.error("Failed to send failure message:", sendError));
             });
         return false;
     }

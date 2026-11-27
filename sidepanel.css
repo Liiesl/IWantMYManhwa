@@ -172,6 +172,34 @@ input[type="number"]:focus {
     outline: none;
 }
 
+.output-format {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+}
+
+.output-format label {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.output-format select {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.output-format select:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
 .status-area {
     background-color: var(--surface-color);
     border-radius: var(--border-radius);
@@ -284,6 +312,7 @@ input[type="number"]:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: var(--spacing-xs);
     margin-bottom: 6px;
 }
 
@@ -303,8 +332,38 @@ input[type="number"]:focus {
     white-space: nowrap;
 }
 
+.remove-chapter-button {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: transparent;
+    color: #ff8a80;
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.remove-chapter-button:hover:not(:disabled) {
+    background-color: rgba(244, 67, 54, 0.12);
+}
+
+.remove-chapter-button:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.chapter-progress-item.cancelled {
+    background-color: rgba(158, 158, 158, 0.1);
+}
+
+.chapter-progress-item.cancelled .chapter-status {
+    color: var(--text-secondary);
+}
+
 .chapter-progress-item.completed .chapter-status,
-.chapter-progress-item.failed .chapter-status {
+.chapter-progress-item.failed .chapter-status,
+.chapter-progress-item.cancelled .chapter-status {
      font-weight: 500;
 }
 
