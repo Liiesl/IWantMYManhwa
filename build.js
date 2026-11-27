@@ -91,7 +91,8 @@ const CONTENT_ADAPTER_FILES = [
     'webtoonscan/WebtoonscanContentAdapter.js',
     'asurascan/AsuraScansContentAdapter.js',
     'arenascan/ArenascanContentAdapter.js',
-    'wfwf/WfwfContentAdapter.js'
+    'wfwf/WfwfContentAdapter.js',
+    'manhwaread/ManhwaReadContentAdapter.js'
 ];
 
 // Extra host permissions that can't be derived from adapter `domains`
@@ -177,9 +178,12 @@ function updateManifest() {
         }
 
         const nonCdnDomains = info.domains.filter(d => !d.includes('cdn'));
-        if (nonCdnDomains.length > 0 && info.urlPattern) {
+        if (nonCdnDomains.length > 0) {
             for (const domain of nonCdnDomains) {
-                contentMatches.add(`*://*.${domain}${info.urlPattern}*`);
+                const matchPattern = info.urlPattern
+                    ? `*://*.${domain}${info.urlPattern}*`
+                    : `*://*.${domain}/*`;
+                contentMatches.add(matchPattern);
             }
         }
     }

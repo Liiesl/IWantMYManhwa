@@ -28,6 +28,8 @@ try {
         'sites/arenascan/ArenascanAdapter.js',
         'sites/wfwf/WfwfContentAdapter.js',
         'sites/wfwf/WfwfAdapter.js',
+        'sites/manhwaread/ManhwaReadContentAdapter.js',
+        'sites/manhwaread/ManhwaReadAdapter.js',
         'sites/SiteRegistry.js'
     );
     console.log("Site adapters loaded successfully.");

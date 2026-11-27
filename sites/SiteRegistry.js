@@ -132,6 +132,11 @@ class SiteRegistry {
             this.register('wfwf', new WfwfAdapter());
         }
 
+        // Register ManhwaRead adapter
+        if (typeof ManhwaReadAdapter !== 'undefined') {
+            this.register('manhwaread', new ManhwaReadAdapter());
+        }
+
         console.log('[SiteRegistry] Initialized with adapters:', this.getRegisteredSites());
     }
 }

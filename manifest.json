@@ -16,6 +16,7 @@
   "host_permissions": [
     "*://*.arenascan.com/*",
     "*://*.asurascans.com/*",
+    "*://*.manhwaread.com/*",
     "*://*.webtoonscan.com/*",
     "*://*.wfwf499.com/*",
     "*://*.y17stm.com/*",
@@ -40,6 +41,7 @@
       "matches": [
         "*://*.arenascan.com/manga/*",
         "*://*.asurascans.com/comics/*",
+        "*://*.manhwaread.com/*",
         "*://*.webtoonscan.com/manhwa/*",
         "*://*.wfwf499.com/list*"
       ],
