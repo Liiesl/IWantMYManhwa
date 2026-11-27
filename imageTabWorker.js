@@ -75,7 +75,7 @@ function extractChapterNumber(name, index) {
     return index + 1;
 }
 
-async function addImageToPdf(pdf, blob) {
+async function preparePdfImage(blob) {
     const bitmap = await createImageBitmap(blob);
     // Cap oversized source images to stay below common PDF page-size limits.
     const scale = Math.min(1, 14400 / Math.max(bitmap.width, bitmap.height));
@@ -96,16 +96,45 @@ async function addImageToPdf(pdf, blob) {
                 : reject(new Error('Could not encode an image for the PDF.')), 'image/jpeg', 0.94);
         });
         const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
-        const image = await pdf.embedJpg(jpegBytes);
-        const pageWidth = pixelWidth * 0.75;
-        const pageHeight = pixelHeight * 0.75;
-        // Give every source image its own page and preserve its aspect ratio.
-        const page = pdf.addPage([pageWidth, pageHeight]);
-        page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+        return {
+            jpegBytes,
+            pageWidth: pixelWidth * 0.75,
+            pageHeight: pixelHeight * 0.75
+        };
     } finally {
         canvas.width = 0;
         canvas.height = 0;
         bitmap.close();
+    }
+}
+
+async function addImageToPdf(pdf, blob) {
+    const { jpegBytes, pageWidth, pageHeight } = await preparePdfImage(blob);
+    const image = await pdf.embedJpg(jpegBytes);
+    // Give every source image its own page and preserve its aspect ratio.
+    const page = pdf.addPage([pageWidth, pageHeight]);
+    page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+}
+
+async function sendCombinedPdfPage(blob, chapterIndex, imageIndex) {
+    const { jpegBytes, pageWidth, pageHeight } = await preparePdfImage(blob);
+    let binary = '';
+    for (let offset = 0; offset < jpegBytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...jpegBytes.subarray(offset, offset + 0x8000));
+    }
+
+    const response = await chrome.runtime.sendMessage({
+        action: 'combinedPdfPage',
+        payload: {
+            imageData: btoa(binary),
+            pageWidth,
+            pageHeight,
+            chapterIndex,
+            imageIndex
+        }
+    });
+    if (!response?.success) {
+        throw new Error(response?.error || 'Could not add an image to the combined PDF.');
     }
 }
 
@@ -179,7 +208,7 @@ async function processChapter(data) {
     const fetchOptions = referrer ? { referrer } : {};
     console.log(`${logPrefix} Referrer for image fetches: ${referrer || '(none — hotlink-protected CDNs may 403)'}`);
 
-    if (!['zip', 'pdf'].includes(outputFormat)) {
+    if (!['zip', 'pdf', 'pdf-combined'].includes(outputFormat)) {
         return { status: 'failed', error: `Unsupported download format: ${outputFormat}` };
     }
     if (!imageUrls || imageUrls.length === 0) {
@@ -187,7 +216,7 @@ async function processChapter(data) {
         return { status: 'failed', error: 'No image URLs' };
     }
     console.log(`${logPrefix} Starting. ${imageUrls.length} images to process.`);
-    if (outputFormat === 'pdf' && (typeof PDFLib === 'undefined' || typeof PDFLib.PDFDocument?.create !== 'function')) {
+    if (outputFormat !== 'zip' && (typeof PDFLib === 'undefined' || typeof PDFLib.PDFDocument?.create !== 'function')) {
         return { status: 'failed', error: 'PDF library is not loaded.' };
     }
     if (outputFormat === 'zip' && typeof JSZip !== 'function') {
@@ -197,7 +226,7 @@ async function processChapter(data) {
     const chapterNumberStr = extractChapterNumber(chapterName, chapterIndex);
     const sanitizedSeriesTitle = sanitizeFilename(seriesTitle || 'WebtoonScan_Download', true);
     const sanitizedChapterNamePart = sanitizeFilename(chapterName || 'unknown', false);
-    const extension = outputFormat === 'pdf' ? 'pdf' : 'zip';
+    const extension = outputFormat === 'zip' ? 'zip' : 'pdf';
     const filename = `${sanitizedSeriesTitle}_Ch_${chapterNumberStr}_(${sanitizedChapterNamePart}).${extension}`;
 
     const chapterZip = outputFormat === 'zip' ? new JSZip() : null;
@@ -227,6 +256,20 @@ async function processChapter(data) {
                 } catch (pdfError) {
                     failedImageCount++;
                     console.error(`${imageLogPrefix} Error adding image to PDF:`, pdfError);
+                }
+                sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
+                continue;
+            }
+
+            if (outputFormat === 'pdf-combined') {
+                try {
+                    // Await each page append so the background PDF retains image order.
+                    await sendCombinedPdfPage(blob, chapterIndex, i);
+                    downloadedCount++;
+                    console.log(`${imageLogPrefix} Added page to combined PDF.`);
+                } catch (pdfError) {
+                    failedImageCount++;
+                    console.error(`${imageLogPrefix} Error adding image to combined PDF:`, pdfError);
                 }
                 sendProgress({ type: 'image', downloadedCount, failedCount: failedImageCount, total: imageUrls.length });
                 continue;
@@ -272,6 +315,11 @@ async function processChapter(data) {
     if (downloadedCount === 0 && imageUrls.length > 0) {
         console.error(`${logPrefix} All images failed to download.`);
         return { status: 'failed', error: 'All images failed' };
+    }
+
+    if (outputFormat === 'pdf-combined') {
+        console.log(`${logPrefix} Added ${downloadedCount} pages to the combined PDF.`);
+        return { status: 'success', failedImages: failedImageCount };
     }
 
     console.log(`${logPrefix} Creating ${outputFormat.toUpperCase()}: ${filename}`);

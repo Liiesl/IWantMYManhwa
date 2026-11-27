@@ -42,4 +42,5 @@ Works with various manhwa and manhua sites through an adapter system. New sites 
 Downloads are organized automatically:
 - Choose ZIP to receive each chapter's images in a numbered folder.
 - Choose PDF to receive one ordered, image-per-page PDF for each chapter.
+- Choose combined PDF to put the selected chapters, in order, into one image-per-page PDF.
 - Series and chapter names are included in downloaded filenames.

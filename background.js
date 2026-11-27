@@ -14,6 +14,17 @@ try {
     // chrome.runtime.sendMessage({ action: "error", message: "Fatal: JSZip library failed to load." });
 }
 
+try {
+    // Load worker libraries during startup so they are available to async message handlers.
+    importScripts('pdf-lib.min.js');
+    if (typeof PDFLib === 'undefined') {
+        throw new Error('pdf-lib failed to load.');
+    }
+    console.log("pdf-lib imported successfully.");
+} catch (error) {
+    console.error("Failed to import pdf-lib:", error);
+}
+
 console.log("IWantMYManhwa background service worker started.");
 
 // --- Load Site Adapters ---
@@ -73,6 +84,10 @@ let currentDownloadState = {
 };
 let chapterScraperPromises = {}; // { tabId: { resolve, reject, timeoutId } } for scraper response
 let imageTabPromises = {}; // { tabId: { resolve, reject, timeoutId } } for image tab completion
+let combinedPdfDocument = null;
+let combinedActiveChapterIndex = null;
+let combinedLastImageIndex = -1;
+let isBatchStarting = false;
 
 // --- Utility Functions ---
 function sleep(ms) {
@@ -214,6 +229,73 @@ function sendFinalStatus(success, message) {
     // Reset state AFTER sending message
     currentDownloadState.isActive = false;
     currentDownloadState.activeTabIds.clear();
+}
+
+async function appendCombinedPdfPage(payload, senderTabId) {
+    if (!currentDownloadState.isActive || !combinedPdfDocument
+        || !currentDownloadState.activeTabIds.has(senderTabId)
+        || payload?.chapterIndex !== combinedActiveChapterIndex
+        || !Number.isInteger(payload?.imageIndex)
+        || payload.imageIndex <= combinedLastImageIndex) {
+        throw new Error('No active combined PDF download is accepting pages.');
+    }
+
+    if (typeof payload?.imageData !== 'string'
+        || !Number.isFinite(payload.pageWidth) || !Number.isFinite(payload.pageHeight)
+        || payload.pageWidth <= 0 || payload.pageHeight <= 0
+        || payload.pageWidth > 10800 || payload.pageHeight > 10800) {
+        throw new Error('Invalid image data for the combined PDF.');
+    }
+
+    const binary = atob(payload.imageData);
+    const jpegBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const image = await combinedPdfDocument.embedJpg(jpegBytes);
+    const page = combinedPdfDocument.addPage([payload.pageWidth, payload.pageHeight]);
+    page.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: payload.pageWidth,
+        height: payload.pageHeight
+    });
+    combinedLastImageIndex = payload.imageIndex;
+}
+
+async function downloadCombinedPdf(title) {
+    if (!combinedPdfDocument || combinedPdfDocument.getPageCount() === 0) {
+        throw new Error('No images were added to the combined PDF.');
+    }
+
+    const sanitizedTitle = sanitizeFilename(title || 'Manhwa', true);
+    const filename = `${sanitizedTitle}_Combined_Chapters.pdf`;
+    const heartbeat = setInterval(() => {
+        sendPopupMessage('updateProgress', { value: 0, text: 'Compiling combined PDF...' });
+    }, 10000);
+
+    let pdfBytes;
+    try {
+        pdfBytes = await combinedPdfDocument.save({
+            updateFieldAppearances: false,
+            objectsPerTick: 50
+        });
+    } finally {
+        clearInterval(heartbeat);
+    }
+
+    const objectUrl = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+    try {
+        const downloadId = await chrome.downloads.download({
+            url: objectUrl,
+            filename,
+            saveAs: false
+        });
+        if (typeof downloadId !== 'number') {
+            throw new Error('Combined PDF download could not be initiated.');
+        }
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+
+    return filename;
 }
 
 
@@ -405,7 +487,7 @@ console.log(`${chapterLogPrefix} Starting processing...`);
 // --- Batch Download Orchestrator (Manages Tasks) ---
 async function handleBatchDownload(chapters, title, format = 'zip') {
     // Initial checks (identical to original)
-    if (currentDownloadState.isActive) {
+    if (currentDownloadState.isActive || isBatchStarting) {
         console.warn("Batch download requested while another is active. Ignoring.");
         sendPopupMessage("error", { message: "Another download is already in progress." });
         return;
@@ -415,13 +497,33 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
         sendPopupMessage("error", { message: "No chapters selected." });
         return;
     }
-     if (!['zip', 'pdf'].includes(format)) {
+     if (!['zip', 'pdf', 'pdf-combined'].includes(format)) {
          console.error(`Unsupported download format: ${format}`);
          sendPopupMessage("error", { message: `Unsupported download format: ${format}` });
          return;
      }
 
-    console.log(`[Batch] Starting individual ${format.toUpperCase()} downloads for ${chapters.length} chapters. Title: ${title}`);
+    combinedPdfDocument = null;
+    combinedActiveChapterIndex = null;
+    combinedLastImageIndex = -1;
+    isBatchStarting = true;
+    if (format === 'pdf-combined') {
+        try {
+            if (typeof PDFLib === 'undefined' || typeof PDFLib.PDFDocument?.create !== 'function') {
+                throw new Error('PDF library is not loaded.');
+            }
+            combinedPdfDocument = await PDFLib.PDFDocument.create();
+        } catch (error) {
+            console.error("[Batch] Could not initialize the combined PDF:", error);
+            combinedPdfDocument = null;
+            isBatchStarting = false;
+            sendPopupMessage("error", { message: `Could not initialize the combined PDF: ${error.message}` });
+            return;
+        }
+    }
+    isBatchStarting = false;
+
+    console.log(`[Batch] Starting ${format.toUpperCase()} downloads for ${chapters.length} chapters. Title: ${title}`);
     currentDownloadState.isActive = true;
     currentDownloadState.isPaused = false;
     currentDownloadState.isStopped = false;
@@ -446,6 +548,8 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
 
 
     // --- Concurrency Control (largely the same) ---
+    // A shared PDF must receive pages in selected chapter order.
+    const maxConcurrentTasks = format === 'pdf-combined' ? 1 : MAX_CONCURRENT_TABS;
     let activeTasks = 0;
     let chapterResults = new Array(chapters.length).fill(null); // Store results { status, chapterName, ... }
 
@@ -470,7 +574,7 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
                 break;
             }
 
-            while (currentDownloadState.chapterQueue.length > 0 && activeTasks < MAX_CONCURRENT_TABS) {
+            while (currentDownloadState.chapterQueue.length > 0 && activeTasks < maxConcurrentTasks) {
                 // Wait if paused before starting new task
                 await waitWhilePaused();
                 
@@ -514,6 +618,10 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
                 console.log(`[Batch] Using adapter: ${adapter.name} for chapter`);
 
                 // Process the chapter asynchronously, including output generation and download.
+                if (format === 'pdf-combined') {
+                    combinedActiveChapterIndex = chapterIndex;
+                    combinedLastImageIndex = -1;
+                }
                 (async () => {
                     let result;
                     try {
@@ -525,6 +633,10 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
                     } finally {
                         chapterResults[chapterIndex] = result || { status: 'failed', chapterName: chapter.name, error: 'Task finished without result' };
                         currentDownloadState.chaptersProcessed++;
+                        if (format === 'pdf-combined') {
+                            combinedActiveChapterIndex = null;
+                            combinedLastImageIndex = -1;
+                        }
 
                         // Update counts based on the *final* status of the chapter process
                         if (result?.status === 'success') {
@@ -592,7 +704,9 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
          }
 
          // Report overall success/failure
-         const finalMessage = `✅ Batch Complete: Initiated ${successfulDownloads}/${chapters.length} chapter downloads. Failed/Skipped: ${failedOrSkipped}. Check your browser downloads.`;
+         const finalMessage = format === 'pdf-combined'
+             ? `✅ Batch Complete: Combined ${successfulDownloads}/${chapters.length} chapters into ${await downloadCombinedPdf(title)}. Failed/Skipped: ${failedOrSkipped}.`
+             : `✅ Batch Complete: Initiated ${successfulDownloads}/${chapters.length} chapter downloads. Failed/Skipped: ${failedOrSkipped}. Check your browser downloads.`;
          console.log(`[Batch] ${finalMessage}`);
          sendFinalStatus(true, finalMessage); // Report overall process as success if at least one started
 
@@ -612,6 +726,9 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
               currentDownloadState.activeTabIds.clear();
          }
          chapterScraperPromises = {};
+         combinedPdfDocument = null;
+         combinedActiveChapterIndex = null;
+         combinedLastImageIndex = -1;
          console.log("[Batch] Orchestration finished.");
     }
 }
@@ -673,6 +790,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.warn(`[Msg Listener] Received imageTabDone for unknown Tab ${tabId}:`, message);
         }
         messageHandled = true;
+
+    } else if (message.action === "combinedPdfPage") {
+        appendCombinedPdfPage(message.payload, sender.tab?.id).then(
+            () => sendResponse({ success: true }),
+            error => {
+                console.error("[Msg Listener] Could not append a combined PDF page:", error);
+                sendResponse({ success: false, error: error.message });
+            }
+        );
+        return true;
 
     } else if (message.action === "pauseDownload") {
         console.log("[Msg Listener] Received pauseDownload request.");

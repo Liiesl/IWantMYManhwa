@@ -34,10 +34,12 @@ Use the Start and End inputs to choose which chapters to download:
 
 ## Step 5: Download
 
-Choose **ZIP (images)** or **PDF (one per chapter)**, then click the **Download** button. The extension will:
+Choose **ZIP (images)**, **PDF (one per chapter)**, or **PDF (combine selected chapters)**, then click the **Download** button. The extension will:
 - Download each chapter's images
-- Create the selected format for each chapter
+- Create the selected ZIP or PDF output
 - Save it to your Downloads folder
+
+Combined PDF downloads process chapters sequentially to preserve the selected order.
 
 ## During Download
 
