@@ -10,6 +10,7 @@ class ManhwaReadContentAdapter extends SiteAdapter {
     }
 
     getChapterListSelectors() {
+        // Prefer ManhwaRead's chapter rows, with a fallback for alternate list markup.
         return [
             'a.chapter-item[href*="/chapter-"]',
             'ul.chapters li a'
@@ -29,6 +30,7 @@ class ManhwaReadContentAdapter extends SiteAdapter {
 
         try {
             const chapterUrl = new URL(url);
+            // Reader URLs use /chapter-001/ slugs rather than a /chapter/ segment.
             return this.matchesUrl(url) && /\/chapter-[^/]+\/?$/i.test(chapterUrl.pathname);
         } catch (error) {
             return false;
@@ -48,6 +50,7 @@ class ManhwaReadContentAdapter extends SiteAdapter {
                 const url = link.href?.trim();
                 if (!url || !this.isValidChapterLink(link, url) || uniqueUrls.has(url)) continue;
 
+                // The dedicated label excludes dates and metadata from the full link text.
                 chapters.push({
                     name: this.cleanChapterName(
                         link.querySelector('.chapter-item__name')?.textContent || link.textContent

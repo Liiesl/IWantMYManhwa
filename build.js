@@ -180,6 +180,7 @@ function updateManifest() {
         const nonCdnDomains = info.domains.filter(d => !d.includes('cdn'));
         if (nonCdnDomains.length > 0) {
             for (const domain of nonCdnDomains) {
+                // Some sites, including ManhwaRead, do not expose one listing-path pattern.
                 const matchPattern = info.urlPattern
                     ? `*://*.${domain}${info.urlPattern}*`
                     : `*://*.${domain}/*`;
@@ -236,6 +237,7 @@ function updateWfwfDnrRules() {
 async function build() {
     console.log('Building content.js from ContentAdapter files...\n');
 
+    // Injected page scripts need the browser UMD bundle, not Node's package entry point.
     const pdfLibSource = './node_modules/pdf-lib/dist/pdf-lib.min.js';
     if (!fs.existsSync(pdfLibSource)) {
         throw new Error('pdf-lib is missing. Run npm install before building.');

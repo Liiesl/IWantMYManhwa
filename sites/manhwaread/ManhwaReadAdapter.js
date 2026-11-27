@@ -20,6 +20,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
 
             const scrapeResults = await chrome.scripting.executeScript({
                 target: { tabId: chapterTabId },
+                // chapterData is created in the site's page world, not the extension's isolated world.
                 world: 'MAIN',
                 func: async (dataTimeoutMs, imageTimeoutMs, retryCount, retryDelayMs) => {
                     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -35,6 +36,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
 
                     let images;
                     try {
+                        // The reader publishes its ordered image list as Base64-encoded JSON.
                         images = JSON.parse(atob(window.chapterData.data));
                     } catch (error) {
                         throw new Error(`Could not decode chapter image data: ${error.message}`);
@@ -51,6 +53,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
                     const imageBase = `${baseUrl.href.replace(/\/+$/, '')}/`;
                     const imageUrls = images.map(image => {
                         const url = new URL(String(image.src).replace(/\\/g, '/').replace(/^\/+/, ''), imageBase);
+                        // Keep image downloads on the host configured by the chapter page.
                         if (url.origin !== baseUrl.origin) {
                             throw new Error('Chapter image data included an unexpected image host.');
                         }
@@ -60,6 +63,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
                     let nextIndex = 0;
                     let loadError = null;
 
+                    // Fetch through the page so the CDN sees the reader's origin and avoids worker-side 403s.
                     const requestImage = url => new Promise((resolve, reject) => {
                         const request = new XMLHttpRequest();
                         request.open('GET', url);
@@ -83,6 +87,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
                         for (let attempt = 0; attempt <= retryCount; attempt++) {
                             try {
                                 const blob = await requestImage(url);
+                                // The shared worker reads these local URLs; indexed storage preserves chapter order.
                                 objectUrls[index] = URL.createObjectURL(blob);
                                 return;
                             } catch (error) {
@@ -186,6 +191,7 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
                         await chrome.scripting.executeScript({
                             target: { tabId: chapterTabId },
                             world: 'MAIN',
+                            // Release the temporary blob URLs created for the image worker.
                             func: urls => urls.forEach(url => URL.revokeObjectURL(url)),
                             args: [imageUrls]
                         });

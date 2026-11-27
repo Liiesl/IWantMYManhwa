@@ -77,6 +77,7 @@ function extractChapterNumber(name, index) {
 
 async function addImageToPdf(pdf, blob) {
     const bitmap = await createImageBitmap(blob);
+    // Cap oversized source images to stay below common PDF page-size limits.
     const scale = Math.min(1, 14400 / Math.max(bitmap.width, bitmap.height));
     const pixelWidth = Math.max(1, Math.round(bitmap.width * scale));
     const pixelHeight = Math.max(1, Math.round(bitmap.height * scale));
@@ -88,6 +89,7 @@ async function addImageToPdf(pdf, blob) {
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Could not prepare an image for the PDF.');
         context.drawImage(bitmap, 0, 0, pixelWidth, pixelHeight);
+        // Normalize formats such as WebP to JPEG, which pdf-lib can embed directly.
         const jpegBlob = await new Promise((resolve, reject) => {
             canvas.toBlob(result => result
                 ? resolve(result)
@@ -97,6 +99,7 @@ async function addImageToPdf(pdf, blob) {
         const image = await pdf.embedJpg(jpegBytes);
         const pageWidth = pixelWidth * 0.75;
         const pageHeight = pixelHeight * 0.75;
+        // Give every source image its own page and preserve its aspect ratio.
         const page = pdf.addPage([pageWidth, pageHeight]);
         page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
     } finally {
@@ -112,6 +115,7 @@ function triggerBlobDownload(blob, filename) {
     anchor.href = objectUrl;
     anchor.download = filename;
     anchor.click();
+    // Let Chrome begin reading the blob before releasing its temporary URL.
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
@@ -205,6 +209,7 @@ async function processChapter(data) {
 
     sendProgress({ type: 'image', downloadedCount: 0, failedCount: 0, total: imageUrls.length });
 
+    // Process in source order so the PDF page order matches the chapter.
     for (let i = 0; i < imageUrls.length; i++) {
         const imageUrl = imageUrls[i];
         const imageLogPrefix = `${logPrefix} Img ${i + 1}/${imageUrls.length}`;
@@ -274,6 +279,7 @@ async function processChapter(data) {
     let outputBlob;
     if (pdf) {
         sendProgress({ type: 'pdf', percent: 0 });
+        // Keep the background's idle-response timer alive while a large PDF is serialized.
         const progressHeartbeat = setInterval(() => sendProgress({ type: 'pdf', percent: 0 }), 10000);
         let pdfBytes;
         try {

@@ -230,6 +230,7 @@ class SiteAdapter {
     }
 
     async loadImageWorker(tabId, format = 'zip') {
+        // Inject only the selected format's library into the chapter tab.
         const library = format === 'pdf'
             ? 'pdf-lib.min.js'
             : format === 'zip'
