@@ -31,7 +31,10 @@ Monitor download progress in real-time:
 Control your downloads:
 - **Pause**: Stop new chapters from starting
 - **Resume**: Continue downloading from where you left off
+- **Remove**: Remove a queued chapter before it starts processing
 - **Stop**: Cancel all remaining downloads
+
+Active chapters cannot be removed once processing has started.
 
 ## Multi-Site Support
 

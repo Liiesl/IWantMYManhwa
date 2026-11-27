@@ -46,7 +46,10 @@ Combined PDF downloads process chapters sequentially to preserve the selected or
 You can:
 - **Pause**: Temporarily stop downloading
 - **Resume**: Continue from where you paused  
+- **Remove**: Remove a queued chapter that has not started yet
 - **Stop**: Cancel remaining downloads
+
+Active chapters cannot be removed once processing has started.
 
 ## Accessing Your Files
 

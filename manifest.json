@@ -11,7 +11,8 @@
     "storage",
     "tabs",
     "alarms",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "offscreen"
   ],
   "host_permissions": [
     "*://*.arenascan.com/*",

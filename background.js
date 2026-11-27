@@ -88,6 +88,8 @@ let combinedPdfDocument = null;
 let combinedActiveChapterIndex = null;
 let combinedLastImageIndex = -1;
 let isBatchStarting = false;
+let offscreenDocumentPromise = null;
+const OFFSCREEN_CHANNEL_NAME = 'iwantmymanhwa-download-blobs';
 
 // --- Utility Functions ---
 function sleep(ms) {
@@ -217,6 +219,25 @@ function updateOverallProgress(textOverride = null) {
     });
 }
 
+function removeQueuedChapter(chapterUrl) {
+    if (!currentDownloadState.isActive || typeof chapterUrl !== 'string') {
+        return { success: false, message: 'There is no active download.' };
+    }
+
+    // Active chapters may already be writing files, so only remove queued work.
+    const queuedIndex = currentDownloadState.chapterQueue.findIndex(chapter => chapter?.url === chapterUrl);
+    if (queuedIndex === -1) {
+        return { success: false, message: 'This chapter has already started or is no longer queued.' };
+    }
+
+    const [chapter] = currentDownloadState.chapterQueue.splice(queuedIndex, 1);
+    currentDownloadState.chaptersCancelled++;
+    currentDownloadState.chaptersProcessed++;
+    updateOverallProgress(`Removed Ch. ${chapter.name} from the queue.`);
+
+    return { success: true, chapterName: chapter.name };
+}
+
 function sendFinalStatus(success, message) {
     sendPopupMessage("downloadComplete", {
         success: success,
@@ -260,6 +281,82 @@ async function appendCombinedPdfPage(payload, senderTabId) {
     combinedLastImageIndex = payload.imageIndex;
 }
 
+async function ensureOffscreenDocument() {
+    if (!chrome.offscreen?.createDocument) {
+        throw new Error('Chrome offscreen documents are not available.');
+    }
+
+    if (!offscreenDocumentPromise) {
+        offscreenDocumentPromise = chrome.offscreen.createDocument({
+            url: 'offscreen.html',
+            reasons: ['BLOBS'],
+            justification: 'Create a Blob URL for the combined PDF download.'
+        }).catch(async error => {
+            const existingDocument = await chrome.runtime.sendMessage({
+                target: 'offscreen',
+                action: 'ping'
+            }).catch(() => null);
+            if (!existingDocument?.success) {
+                offscreenDocumentPromise = null;
+                throw error;
+            }
+        });
+    }
+
+    await offscreenDocumentPromise;
+    const response = await chrome.runtime.sendMessage({
+        target: 'offscreen',
+        action: 'ping'
+    });
+    if (!response?.success) {
+        offscreenDocumentPromise = null;
+        throw new Error('Could not initialize the PDF download document.');
+    }
+}
+
+function sendOffscreenBlobCommand(message, expectedAction) {
+    return new Promise((resolve, reject) => {
+        const channel = new BroadcastChannel(OFFSCREEN_CHANNEL_NAME);
+        const timeoutId = setTimeout(() => {
+            channel.close();
+            reject(new Error('Timed out while preparing the combined PDF download.'));
+        }, 30000);
+
+        const handleResponse = event => {
+            if (event.data?.requestId !== message.requestId) return;
+
+            clearTimeout(timeoutId);
+            channel.removeEventListener('message', handleResponse);
+            channel.close();
+            if (event.data.action === expectedAction && event.data.success) {
+                resolve(event.data);
+            } else {
+                reject(new Error(event.data.error || 'Could not prepare the combined PDF download.'));
+            }
+        };
+
+        channel.addEventListener('message', handleResponse);
+        try {
+            channel.postMessage(message);
+        } catch (error) {
+            clearTimeout(timeoutId);
+            channel.removeEventListener('message', handleResponse);
+            channel.close();
+            reject(error);
+        }
+    });
+}
+
+async function closeOffscreenDocument() {
+    if (!offscreenDocumentPromise) return;
+
+    try {
+        await chrome.offscreen.closeDocument();
+    } finally {
+        offscreenDocumentPromise = null;
+    }
+}
+
 async function downloadCombinedPdf(title) {
     if (!combinedPdfDocument || combinedPdfDocument.getPageCount() === 0) {
         throw new Error('No images were added to the combined PDF.');
@@ -281,8 +378,19 @@ async function downloadCombinedPdf(title) {
         clearInterval(heartbeat);
     }
 
-    const objectUrl = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+    const requestId = crypto.randomUUID();
+    let offscreenReady = false;
+    let objectUrlRequested = false;
     try {
+        await ensureOffscreenDocument();
+        offscreenReady = true;
+        objectUrlRequested = true;
+        const { objectUrl } = await sendOffscreenBlobCommand({
+            action: 'createObjectUrl',
+            requestId,
+            blob: new Blob([pdfBytes], { type: 'application/pdf' })
+        }, 'objectUrlCreated');
+
         const downloadId = await chrome.downloads.download({
             url: objectUrl,
             filename,
@@ -292,7 +400,18 @@ async function downloadCombinedPdf(title) {
             throw new Error('Combined PDF download could not be initiated.');
         }
     } finally {
-        URL.revokeObjectURL(objectUrl);
+        if (offscreenReady) {
+            try {
+                if (objectUrlRequested) {
+                    await sendOffscreenBlobCommand({
+                        action: 'revokeObjectUrl',
+                        requestId
+                    }, 'objectUrlRevoked');
+                }
+            } finally {
+                await closeOffscreenDocument();
+            }
+        }
     }
 
     return filename;
@@ -569,7 +688,8 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
                 console.log("[Batch] Download stopped. Cancelling remaining chapters.");
                 // Mark all remaining chapters as cancelled
                 const remainingCount = currentDownloadState.chapterQueue.length;
-                currentDownloadState.chaptersCancelled = remainingCount;
+                currentDownloadState.chaptersCancelled += remainingCount;
+                currentDownloadState.chaptersProcessed += remainingCount;
                 currentDownloadState.chapterQueue = [];
                 break;
             }
@@ -698,15 +818,22 @@ async function handleBatchDownload(chapters, title, format = 'zip') {
              return;
          }
 
+         if (successfulDownloads === 0 && currentDownloadState.chaptersCancelled > 0) {
+             const finalMessage = `No chapters downloaded. Failed/Skipped ${failedOrSkipped}, Cancelled ${currentDownloadState.chaptersCancelled}.`;
+             sendFinalStatus(false, finalMessage);
+             return;
+         }
+
          if (successfulDownloads === 0 && failedOrSkipped > 0) {
              console.warn("[Batch] No chapter downloads were successfully initiated.");
              throw new Error(`Failed to initiate download for any chapters (Failed/Skipped: ${failedOrSkipped}).`);
          }
 
          // Report overall success/failure
+         const cancelled = currentDownloadState.chaptersCancelled;
          const finalMessage = format === 'pdf-combined'
-             ? `✅ Batch Complete: Combined ${successfulDownloads}/${chapters.length} chapters into ${await downloadCombinedPdf(title)}. Failed/Skipped: ${failedOrSkipped}.`
-             : `✅ Batch Complete: Initiated ${successfulDownloads}/${chapters.length} chapter downloads. Failed/Skipped: ${failedOrSkipped}. Check your browser downloads.`;
+             ? `✅ Batch Complete: Combined ${successfulDownloads}/${chapters.length} chapters into ${await downloadCombinedPdf(title)}. Failed/Skipped: ${failedOrSkipped}, Cancelled: ${cancelled}.`
+             : `✅ Batch Complete: Initiated ${successfulDownloads}/${chapters.length} chapter downloads. Failed/Skipped: ${failedOrSkipped}, Cancelled: ${cancelled}. Check your browser downloads.`;
          console.log(`[Batch] ${finalMessage}`);
          sendFinalStatus(true, finalMessage); // Report overall process as success if at least one started
 
@@ -800,6 +927,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
         );
         return true;
+
+    } else if (message.action === "removeQueuedChapter") {
+        sendResponse(removeQueuedChapter(message.chapterUrl));
+        messageHandled = true;
 
     } else if (message.action === "pauseDownload") {
         console.log("[Msg Listener] Received pauseDownload request.");
