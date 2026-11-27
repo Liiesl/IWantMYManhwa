@@ -133,10 +133,10 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
 
             if (options.reportImageTotal) options.reportImageTotal(imageUrls.length);
             if (updateStatus) updateStatus('loading', 'Preparing chapter images...');
-            await chrome.scripting.executeScript({ target: { tabId: chapterTabId }, files: ['jszip.min.js'] });
-            await chrome.scripting.executeScript({ target: { tabId: chapterTabId }, files: ['imageTabWorker.js'] });
+            await this.loadImageWorker(chapterTabId, options.outputFormat);
 
             const workerData = {
+                outputFormat: options.outputFormat || 'zip',
                 imageUrls,
                 seriesTitle,
                 chapterName: chapter.name,
@@ -151,8 +151,9 @@ class ManhwaReadAdapter extends ManhwaReadContentAdapter {
                     const total = progress.total || imageUrls.length;
                     const done = Math.min(progress.downloadedCount || 0, total);
                     updateStatus('fetching', `Downloading ${done}/${total}...`, { progress: { done, total } });
-                } else if (progress.type === 'zip' && updateStatus) {
-                    updateStatus('zipping', `Zipping... ${progress.percent}%`, {
+                } else if ((progress.type === 'zip' || progress.type === 'pdf') && updateStatus) {
+                    const message = progress.type === 'pdf' ? `Compiling PDF... ${progress.percent}%` : `Zipping... ${progress.percent}%`;
+                    updateStatus('zipping', message, {
                         progress: { done: progress.percent, total: 100 }
                     });
                 }

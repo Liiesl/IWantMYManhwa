@@ -34,9 +34,9 @@ Use the Start and End inputs to choose which chapters to download:
 
 ## Step 5: Download
 
-Click the **Download** button. The extension will:
+Choose **ZIP (images)** or **PDF (one per chapter)**, then click the **Download** button. The extension will:
 - Download each chapter's images
-- Create a ZIP file organized by chapter
+- Create the selected format for each chapter
 - Save it to your Downloads folder
 
 ## During Download
@@ -48,4 +48,4 @@ You can:
 
 ## Accessing Your Files
 
-Downloaded ZIP files are saved to your browser's default download location. Extract them to read offline!
+Downloaded files are saved to your browser's default download location. Extract ZIPs or open PDFs to read offline.

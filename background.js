@@ -1,4 +1,4 @@
-// background.js for WebtoonScan Downloader (Refactored - Individual Chapter Zips)
+// background.js for the multi-site chapter downloader
 'use strict';
 
 // Assume jszip.min.js is loaded correctly via manifest or importScripts
@@ -14,7 +14,7 @@ try {
     // chrome.runtime.sendMessage({ action: "error", message: "Fatal: JSZip library failed to load." });
 }
 
-console.log("WebtoonScan Downloader (Refactored/Individual Zips): Background service worker started.");
+console.log("IWantMYManhwa background service worker started.");
 
 // --- Load Site Adapters ---
 try {
@@ -341,7 +341,7 @@ async function triggerChapterZipDownload(chapterZip, zipFilename, chapterLogPref
 
 // --- Process Single Chapter (Downloads its own ZIP) ---
 // Delegates to adapter for download logic
-async function processSingleChapter(chapter, chapterIndex, totalChapters, seriesTitle, adapter) {
+async function processSingleChapter(chapter, chapterIndex, totalChapters, seriesTitle, adapter, format) {
     const chapterLogPrefix = `[Ch ${chapterIndex + 1}/${totalChapters} "${chapter.name}"]`;
     const chapterDataForUi = { chapterId: chapter.url, chapterName: chapter.name };
 
@@ -392,7 +392,7 @@ console.log(`${chapterLogPrefix} Starting processing...`);
             { chapter, index: chapterIndex, activeTabIds: currentDownloadState.activeTabIds },
             seriesTitle,
             updateStatus,
-            { sendPopupMessage, reportImageTotal }
+            { sendPopupMessage, reportImageTotal, outputFormat: format }
         );
         return result;
     } catch (error) {
@@ -403,7 +403,7 @@ console.log(`${chapterLogPrefix} Starting processing...`);
 }
 
 // --- Batch Download Orchestrator (Manages Tasks) ---
-async function handleBatchDownload(chapters, title) {
+async function handleBatchDownload(chapters, title, format = 'zip') {
     // Initial checks (identical to original)
     if (currentDownloadState.isActive) {
         console.warn("Batch download requested while another is active. Ignoring.");
@@ -415,13 +415,13 @@ async function handleBatchDownload(chapters, title) {
         sendPopupMessage("error", { message: "No chapters selected." });
         return;
     }
-     if (typeof JSZip === 'undefined') {
-         console.error("JSZip is not loaded. Cannot start download.");
-         sendPopupMessage("error", { message: "Fatal Error: JSZip library not loaded." });
+     if (!['zip', 'pdf'].includes(format)) {
+         console.error(`Unsupported download format: ${format}`);
+         sendPopupMessage("error", { message: `Unsupported download format: ${format}` });
          return;
      }
 
-    console.log(`[Batch] Starting individual chapter downloads for ${chapters.length} chapters. Title: ${title}`);
+    console.log(`[Batch] Starting individual ${format.toUpperCase()} downloads for ${chapters.length} chapters. Title: ${title}`);
     currentDownloadState.isActive = true;
     currentDownloadState.isPaused = false;
     currentDownloadState.isStopped = false;
@@ -513,12 +513,12 @@ async function handleBatchDownload(chapters, title) {
 
                 console.log(`[Batch] Using adapter: ${adapter.name} for chapter`);
 
-                // Process the chapter asynchronously (which now includes zipping and download)
+                // Process the chapter asynchronously, including output generation and download.
                 (async () => {
                     let result;
                     try {
                         // Pass adapter to processSingleChapter
-                        result = await processSingleChapter(chapter, chapterIndex, chapters.length, currentDownloadState.title, adapter);
+                        result = await processSingleChapter(chapter, chapterIndex, chapters.length, currentDownloadState.title, adapter, format);
                     } catch (error) {
                         console.error(`[Batch] UNEXPECTED error from processSingleChapter for Ch ${chapter.name} (Index: ${chapterIndex}):`, error);
                         result = { status: 'failed', chapterName: chapter.name, error: `Unexpected Orchestrator Error: ${error.message}` };
@@ -643,8 +643,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     } else if (message.action === "startDownload") {
         console.log("[Msg Listener] Received startDownload request.");
-        const { chapters, title } = message;
-        handleBatchDownload(chapters, title); // Async, no sendResponse needed
+        const { chapters, title, format } = message;
+        handleBatchDownload(chapters, title, format); // Async, no sendResponse needed
         messageHandled = true;
 
     } else if (message.action === "scraperError") {

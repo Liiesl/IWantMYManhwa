@@ -59,6 +59,14 @@
             </div>
         </div>
 
+        <div class="output-format">
+            <label for="outputFormat">Download as</label>
+            <select id="outputFormat">
+                <option value="zip">ZIP (images)</option>
+                <option value="pdf">PDF (one per chapter)</option>
+            </select>
+        </div>
+
         <button id="downloadBtn" class="action-button download-button" disabled>
             <span class="button-icon"><i class="fas fa-download"></i></span>
             <span>Download</span>
@@ -79,7 +87,7 @@
             <!-- Overall Status Message -->
             <div class="status-message" id="overallStatusMessage">Navigate to a manhwa page and scan</div>
 
-            <!-- Overall Progress Bar (Mainly for Zipping) -->
+            <!-- Overall Progress Bar for ZIP/PDF generation -->
             <div class="progress-container" id="overallProgressContainer" style="display: none;">
                 <div class="progress-track">
                     <div class="progress-indicator" id="progress-visual"></div>

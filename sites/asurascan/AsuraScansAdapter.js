@@ -71,12 +71,12 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
             if (updateStatus) updateStatus('loading', 'Preparing image tab...');
             await this.waitForTabReady(imageTabId, config.tabLoadTimeoutMs);
 
-            await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
-            await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
+            await this.loadImageWorker(imageTabId, options.outputFormat);
 
             if (updateStatus) updateStatus('fetching', 'Processing images...');
 
             const workerData = {
+                outputFormat: options.outputFormat || 'zip',
                 imageUrls: validImageUrls,
                 seriesTitle: seriesTitle,
                 chapterName: chapter.name,
@@ -96,8 +96,9 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
                     const total = progress.total || validImageUrls.length;
                     const done = Math.min(progress.downloadedCount || 0, total);
                     if (updateStatus) updateStatus('fetching', `Downloading ${done}/${total}...`, { progress: { done, total } });
-                } else if (progress.type === 'zip') {
-                    if (updateStatus) updateStatus('zipping', `Zipping... ${progress.percent}%`, { progress: { done: progress.percent, total: 100 } });
+                } else if (progress.type === 'zip' || progress.type === 'pdf') {
+                    const message = progress.type === 'pdf' ? `Compiling PDF... ${progress.percent}%` : `Zipping... ${progress.percent}%`;
+                    if (updateStatus) updateStatus('zipping', message, { progress: { done: progress.percent, total: 100 } });
                 }
             };
 
@@ -116,8 +117,7 @@ class AsuraScansAdapter extends AsuraScansContentAdapter {
                     activeTabIds.add(imageTabId);
                     if (updateStatus) updateStatus('loading', 'Preparing image tab (retry)...');
                     await this.waitForTabReady(imageTabId, config.tabLoadTimeoutMs);
-                    await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['jszip.min.js'] });
-                    await chrome.scripting.executeScript({ target: { tabId: imageTabId }, files: ['imageTabWorker.js'] });
+                    await this.loadImageWorker(imageTabId, options.outputFormat);
                 }
 
                 if (updateStatus) updateStatus('fetching', 'Processing images...');

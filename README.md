@@ -19,6 +19,7 @@
 ## Features
 * **Multi-Site Support:** Extensible adapter system allows easy addition of new sites
 * **Bulk Downloading:** Download multiple chapters simultaneously.
+* **Flexible Downloads:** Choose ZIP archives of chapter images or a PDF per chapter.
 * **Side Panel Interface:** Utilizes Chrome's Side Panel for an easily accessible and persistent UI while Browse.
 * **Simple Controls:** Easy selection of chapters and download initiation within the side panel.
 * **Manifest V3:** Built using the latest Chrome extension platform standards for improved security, performance, and privacy.

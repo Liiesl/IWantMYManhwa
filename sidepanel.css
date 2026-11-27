@@ -172,6 +172,34 @@ input[type="number"]:focus {
     outline: none;
 }
 
+.output-format {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+}
+
+.output-format label {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.output-format select {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.output-format select:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
 .status-area {
     background-color: var(--surface-color);
     border-radius: var(--border-radius);

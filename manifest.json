@@ -63,6 +63,7 @@
     {
       "resources": [
         "jszip.min.js",
+        "pdf-lib.min.js",
         "imageTabWorker.js",
         "docs/*",
         "sites/*.js"

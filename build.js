@@ -235,6 +235,14 @@ function updateWfwfDnrRules() {
 
 async function build() {
     console.log('Building content.js from ContentAdapter files...\n');
+
+    const pdfLibSource = './node_modules/pdf-lib/dist/pdf-lib.min.js';
+    if (!fs.existsSync(pdfLibSource)) {
+        throw new Error('pdf-lib is missing. Run npm install before building.');
+    }
+    fs.copyFileSync(pdfLibSource, './pdf-lib.min.js');
+    fs.copyFileSync('./node_modules/pdf-lib/LICENSE.md', './pdf-lib-LICENSE.md');
+    console.log('  ✓ Bundled: pdf-lib.min.js');
     
     let adapterCode = '';
     let registryCode = '';

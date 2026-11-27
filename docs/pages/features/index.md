@@ -40,14 +40,6 @@ Works with various manhwa and manhua sites through an adapter system. New sites 
 ## Organized Output
 
 Downloads are organized automatically:
-- Each chapter in its own folder
-- Images numbered sequentially
-- Series title included in folder structure
-- Everything packaged in a single ZIP file
-
-## ZIP Compression
-
-All chapters are compressed into a single ZIP file for easy:
-- Storage
-- Transfer
-- Organization
+- Choose ZIP to receive each chapter's images in a numbered folder.
+- Choose PDF to receive one ordered, image-per-page PDF for each chapter.
+- Series and chapter names are included in downloaded filenames.

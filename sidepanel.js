@@ -13,6 +13,7 @@ const manhwaTitleEl = document.getElementById('manhwaTitle');
 const chapterCountEl = document.getElementById('chapterCount');
 const startChapterInput = document.getElementById('startChapter');
 const endChapterInput = document.getElementById('endChapter');
+const outputFormatInput = document.getElementById('outputFormat');
 const overallStatusMessageEl = document.getElementById('overallStatusMessage');
 const overallProgressContainerEl = document.getElementById('overallProgressContainer');
 const progressVisual = document.getElementById('progress-visual'); // Visible overall bar fill
@@ -38,7 +39,7 @@ function setOverallStatus(message, isError = false, isComplete = false) {
     console.log(`Overall Status Update: ${message}`);
 }
 
-// Only used for the final ZIP generation progress now
+// Used for the final ZIP or PDF generation progress.
 function updateOverallProgress(text, percent = -1) {
     overallProgressContainerEl.style.display = 'block'; // Ensure visible
     progressText.textContent = text;
@@ -323,7 +324,8 @@ downloadBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({
         action: "startDownload",
         chapters: chaptersToDownload,
-        title: currentManhwaTitle
+        title: currentManhwaTitle,
+        format: outputFormatInput.value
     }).catch(error => {
          console.error("Error sending startDownload message:", error);
          setOverallStatus(`Error starting download: ${error.message}`, true);
@@ -381,17 +383,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case "updateProgress": // Now used for overall progress/status text from background
              if(isDownloading) {
-                 // Check if it contains zip progress or just a status update
+                 // Check if it contains archive/PDF progress or just a status update.
                  const percentMatch = message.payload?.text?.match(/(\d+)%/);
                  if (percentMatch) {
                      updateOverallProgress(message.payload.text, parseInt(percentMatch[1], 10));
-                 } else if (message.payload?.text?.toLowerCase().includes("generating zip") || message.payload?.text?.toLowerCase().includes("compressing")) {
+                 } else if (message.payload?.text?.toLowerCase().includes("generating zip")
+                     || message.payload?.text?.toLowerCase().includes("compiling pdf")
+                     || message.payload?.text?.toLowerCase().includes("compressing")) {
                      updateOverallProgress(message.payload.text); // Update text, show bar
                  } else {
                      // General status update during processing phases
                      setOverallStatus(message.payload.text);
-                     // Optionally hide overall progress bar if it's not zipping stage
-                     if (!message.payload?.text?.toLowerCase().includes("zip")) {
+                     if (!message.payload?.text?.toLowerCase().includes("zip")
+                         && !message.payload?.text?.toLowerCase().includes("pdf")) {
                          hideOverallProgress();
                      }
                  }
@@ -402,8 +406,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const { success, message: finalMsg, totalChaptersSucceeded, totalChaptersRequested } = message.payload;
              const displayMsg = finalMsg || (success ? `Download complete (${totalChaptersSucceeded}/${totalChaptersRequested})` : 'Download failed.');
             setOverallStatus(displayMsg, !success, success);
-            // Keep overall progress hidden unless it was zipping just before this
-            if (!overallStatusMessageEl.textContent.includes("ZIP")) {
+            // Keep overall progress visible when the final status includes ZIP/PDF progress.
+            if (!overallStatusMessageEl.textContent.includes("ZIP")
+                && !overallStatusMessageEl.textContent.includes("PDF")) {
                  hideOverallProgress();
             }
             isDownloading = false;
